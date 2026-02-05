@@ -8,17 +8,21 @@ if (!defined('_PS_VERSION_')) {
 
 require_once __DIR__ . '/src/Hook/AbstractDisplayHook.php';
 require_once __DIR__ . '/src/Hook/DisplayProductLinkedFeatures.php';
+require_once __DIR__ . '/src/Service/LinkedProductGroupService.php';
 
 class Po_linkedproduct_features extends Module
 {
     /** @var string */
     protected $_html = '';
+    private const GROUP_PAGE_SIZE = 20;
+    protected ?array $groupDryRunData = null;
+    protected array $groupDryRunInput = [];
 
     public function __construct()
     {
         $this->name = 'po_linkedproduct_features';
         $this->tab = 'administration';
-        $this->version = '1.0.1';
+        $this->version = '1.1.0';
         $this->author = 'Przemysław Markiewicz';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -61,8 +65,9 @@ class Po_linkedproduct_features extends Module
     public function getContent()
     {
         $this->_html = '';
+        $section = (string) Tools::getValue('lp_section', 'profiles');
 
-        if (Tools::isSubmit('lp_action')) {
+        if (Tools::isSubmit('lp_action') && $section === 'profiles') {
             $action = (string) Tools::getValue('lp_action');
             try {
                 switch ($action) {
@@ -91,7 +96,17 @@ class Po_linkedproduct_features extends Module
             }
         }
 
-        return $this->_html . $this->renderFeatureProfiles();
+        if (Tools::isSubmit('lp_action') && $section === 'groups') {
+            $this->processGroupActions();
+        }
+
+        $navigation = $this->renderNavigation($section);
+
+        if ($section === 'groups') {
+            return $this->_html . $navigation . $this->renderGroupManagement();
+        }
+
+        return $this->_html . $navigation . $this->renderFeatureProfiles();
     }
 
     public function hookDisplayAdminProductsExtra($params)
@@ -331,6 +346,396 @@ class Po_linkedproduct_features extends Module
         return $output;
     }
 
+    protected function renderNavigation(string $section): string
+    {
+        $baseUrl = $this->context->link->getAdminLink('AdminModules', true) . '&configure=' . $this->name;
+        $profilesUrl = $baseUrl . '&lp_section=profiles';
+        $groupsUrl = $baseUrl . '&lp_section=groups';
+
+        return '<div class="panel">
+            <ul class="nav nav-tabs">
+                <li' . ($section === 'profiles' ? ' class="active"' : '') . '>
+                    <a href="' . $profilesUrl . '">' . $this->l('Profile cech') . '</a>
+                </li>
+                <li' . ($section === 'groups' ? ' class="active"' : '') . '>
+                    <a href="' . $groupsUrl . '">' . $this->l('Powiązania produktów') . '</a>
+                </li>
+            </ul>
+        </div>';
+    }
+
+    protected function processGroupActions(): void
+    {
+        $token = (string) Tools::getValue('token');
+        if ($token !== Tools::getAdminTokenLite('AdminModules')) {
+            $this->_html .= $this->displayError($this->l('Nieprawidłowy token.'));
+            return;
+        }
+
+        $action = (string) Tools::getValue('lp_action');
+        $service = $this->getGroupService();
+
+        try {
+            switch ($action) {
+                case 'dry_run':
+                    $this->processGroupDryRun($service);
+                    break;
+                case 'create_group':
+                    $this->processGroupCreate($service);
+                    break;
+                case 'delete_group':
+                    $this->processGroupDelete($service);
+                    break;
+                case 'bulk_delete':
+                    $this->processGroupBulkDelete($service);
+                    break;
+                case 'rebuild_group':
+                    $this->processGroupRebuild($service);
+                    break;
+                case 'remove_product':
+                    $this->processGroupRemoveProduct($service);
+                    break;
+            }
+        } catch (\Throwable $e) {
+            $this->_html .= $this->displayError($this->l('Błąd akcji: ') . $e->getMessage());
+        }
+    }
+
+    protected function renderGroupManagement(): string
+    {
+        $view = (bool) Tools::getValue('view');
+        $groupId = (int) Tools::getValue('id_group');
+        $token = Tools::getAdminTokenLite('AdminModules');
+        $currentUrl = $this->context->link->getAdminLink('AdminModules', true) . '&configure=' . $this->name . '&lp_section=groups';
+
+        if ($view && $groupId > 0) {
+            $group = $this->getGroup($groupId);
+            if (!$group) {
+                $this->_html .= $this->displayError($this->l('Nie znaleziono grupy.'));
+                return '';
+            }
+
+            $filters = [
+                'product_id' => (int) Tools::getValue('filter_product_id'),
+                'sku' => trim((string) Tools::getValue('filter_sku')),
+            ];
+            $page = max(1, (int) Tools::getValue('page'));
+            $offset = ($page - 1) * self::GROUP_PAGE_SIZE;
+            $service = $this->getGroupService();
+            $productsData = $service->findGroupProducts($groupId, $filters, $offset, self::GROUP_PAGE_SIZE);
+
+            $this->context->smarty->assign([
+                'group' => $group,
+                'products' => $productsData['rows'],
+                'total' => $productsData['total'],
+                'page' => $page,
+                'page_size' => self::GROUP_PAGE_SIZE,
+                'page_count' => (int) ceil($productsData['total'] / self::GROUP_PAGE_SIZE),
+                'filters' => $filters,
+                'current_url' => $currentUrl,
+                'filter_query' => $this->buildQuery($filters),
+                'token' => $token,
+            ]);
+
+            return $this->display($this->getLocalPath() . $this->name . '.php', 'views/templates/admin/group_view.tpl');
+        }
+
+        $filters = $this->getGroupFilters();
+        $page = max(1, (int) Tools::getValue('page'));
+        $offset = ($page - 1) * self::GROUP_PAGE_SIZE;
+        $groupsData = $this->getGroups($filters, $offset, self::GROUP_PAGE_SIZE);
+
+        $this->context->smarty->assign([
+            'groups' => $groupsData['rows'],
+            'total' => $groupsData['total'],
+            'page' => $page,
+            'page_size' => self::GROUP_PAGE_SIZE,
+            'page_count' => (int) ceil($groupsData['total'] / self::GROUP_PAGE_SIZE),
+            'filters' => $filters,
+            'features' => $this->getFeatureOptions((int) $this->context->language->id),
+            'dry_run' => $this->groupDryRunData ?? null,
+            'dry_run_input' => $this->groupDryRunInput ?? [],
+            'current_url' => $currentUrl,
+            'filter_query' => $this->buildQuery($filters),
+            'token' => $token,
+        ]);
+
+        return $this->display($this->getLocalPath() . $this->name . '.php', 'views/templates/admin/groups.tpl');
+    }
+
+    protected function processGroupDryRun(\PoLinkedProductFeatures\Service\LinkedProductGroupService $service): void
+    {
+        [$prefix, $featureIds] = $this->validateGroupInput();
+        if (!$prefix || !$featureIds) {
+            return;
+        }
+
+        $this->groupDryRunData = $service->previewMatch($prefix, $featureIds, [], 10);
+        $this->groupDryRunInput = [
+            'prefix' => $prefix,
+            'feature_ids' => $featureIds,
+        ];
+    }
+
+    protected function processGroupCreate(\PoLinkedProductFeatures\Service\LinkedProductGroupService $service): void
+    {
+        [$prefix, $featureIds] = $this->validateGroupInput();
+        if (!$prefix || !$featureIds) {
+            return;
+        }
+
+        $profileName = trim((string) Tools::getValue('profile_name'));
+        if ($profileName === '') {
+            $profileName = $this->l('Grupa ') . $prefix;
+        }
+
+        $db = \Db::getInstance();
+        $exists = (int) $db->getValue('SELECT id_group FROM ' . _DB_PREFIX_ . 'po_link_group WHERE sku_prefix=\'' . pSQL($prefix) . '\'');
+        if ($exists > 0) {
+            $this->_html .= $this->displayError($this->l('Grupa z tym prefiksem już istnieje.'));
+            return;
+        }
+
+        $db->execute('START TRANSACTION');
+        try {
+            $db->insert('po_link_profile', [
+                'name' => pSQL($profileName),
+                'options_csv' => pSQL(implode(',', $featureIds)),
+                'family_csv' => null,
+                'active' => 1,
+            ]);
+            $profileId = (int) $db->Insert_ID();
+
+            $db->insert('po_link_group', [
+                'id_profile' => (int) $profileId,
+                'sku_prefix' => pSQL($prefix),
+                'feature_values_json' => null,
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+            $groupId = (int) $db->Insert_ID();
+
+            $db->execute('COMMIT');
+        } catch (\Throwable $e) {
+            $db->execute('ROLLBACK');
+            $this->_html .= $this->displayError($this->l('Nie udało się utworzyć grupy.'));
+            return;
+        }
+
+        $count = $service->rebuildGroup($groupId);
+        $this->_html .= $this->displayConfirmation(sprintf($this->l('Grupa utworzona, powiązano produktów: %d.'), $count));
+    }
+
+    protected function processGroupDelete(\PoLinkedProductFeatures\Service\LinkedProductGroupService $service): void
+    {
+        $groupId = (int) Tools::getValue('id_group');
+        if ($groupId <= 0) {
+            return;
+        }
+
+        $service->deleteGroup($groupId);
+        $this->_html .= $this->displayConfirmation($this->l('Grupa została usunięta.'));
+    }
+
+    protected function processGroupBulkDelete(\PoLinkedProductFeatures\Service\LinkedProductGroupService $service): void
+    {
+        $ids = Tools::getValue('group_ids', []);
+        if (!is_array($ids)) {
+            return;
+        }
+
+        $deleted = 0;
+        foreach ($ids as $id) {
+            $groupId = (int) $id;
+            if ($groupId <= 0) {
+                continue;
+            }
+            $service->deleteGroup($groupId);
+            $deleted++;
+        }
+
+        if ($deleted > 0) {
+            $this->_html .= $this->displayConfirmation(sprintf($this->l('Usunięto grupy: %d.'), $deleted));
+        }
+    }
+
+    protected function processGroupRebuild(\PoLinkedProductFeatures\Service\LinkedProductGroupService $service): void
+    {
+        $groupId = (int) Tools::getValue('id_group');
+        if ($groupId <= 0) {
+            return;
+        }
+
+        $count = $service->rebuildGroup($groupId);
+        $this->_html .= $this->displayConfirmation(sprintf($this->l('Przebudowano grupę, powiązano produktów: %d.'), $count));
+    }
+
+    protected function processGroupRemoveProduct(\PoLinkedProductFeatures\Service\LinkedProductGroupService $service): void
+    {
+        $groupId = (int) Tools::getValue('id_group');
+        $productId = (int) Tools::getValue('id_product');
+        if ($groupId <= 0 || $productId <= 0) {
+            return;
+        }
+
+        if ($service->removeProductFromGroup($groupId, $productId)) {
+            $this->_html .= $this->displayConfirmation($this->l('Produkt został usunięty z grupy.'));
+        }
+    }
+
+    protected function validateGroupInput(): array
+    {
+        $prefix = strtoupper(trim((string) Tools::getValue('sku_prefix')));
+        $featureIds = Tools::getValue('feature_ids', []);
+        if (!is_array($featureIds)) {
+            $featureIds = [];
+        }
+        $featureIds = array_values(array_unique(array_filter(array_map('intval', $featureIds), static function ($id) {
+            return $id > 0;
+        })));
+
+        $hasError = false;
+        if ($prefix === '') {
+            $this->_html .= $this->displayError($this->l('Prefiks SKU jest wymagany.'));
+            $hasError = true;
+        } elseif (Tools::strlen($prefix) > 64) {
+            $this->_html .= $this->displayError($this->l('Prefiks SKU jest zbyt długi.'));
+            $hasError = true;
+        } elseif (!preg_match('/^[A-Z0-9\-_]+$/', $prefix)) {
+            $this->_html .= $this->displayError($this->l('Prefiks SKU ma niedozwolone znaki.'));
+            $hasError = true;
+        }
+
+        if (count($featureIds) < 1 || count($featureIds) > 3) {
+            $this->_html .= $this->displayError($this->l('Wybierz od 1 do 3 cech.'));
+            $hasError = true;
+        }
+
+        if ($hasError) {
+            $this->groupDryRunInput = [
+                'prefix' => $prefix,
+                'feature_ids' => $featureIds,
+            ];
+            return [null, null];
+        }
+
+        return [$prefix, $featureIds];
+    }
+
+    protected function getGroups(array $filters, int $offset, int $limit): array
+    {
+        $where = [];
+        $joins = ' INNER JOIN ' . _DB_PREFIX_ . 'po_link_profile p ON p.id_profile = g.id_profile';
+        if (!empty($filters['prefix'])) {
+            $where[] = 'g.sku_prefix LIKE \'%' . pSQL($filters['prefix']) . '%\'';
+        }
+
+        if (!empty($filters['feature_id'])) {
+            $where[] = 'FIND_IN_SET(' . (int) $filters['feature_id'] . ', p.options_csv)';
+        }
+
+        if (!empty($filters['product_id']) || !empty($filters['sku'])) {
+            $productId = (int) $filters['product_id'];
+            if ($productId <= 0 && !empty($filters['sku'])) {
+                $productId = (int) \Db::getInstance()->getValue('SELECT id_product FROM ' . _DB_PREFIX_ . 'product WHERE reference=\'' . pSQL($filters['sku']) . '\'');
+            }
+            if ($productId > 0) {
+                $assignment = \Db::getInstance()->getRow('SELECT id_profile, family_key FROM ' . _DB_PREFIX_ . 'po_link_product_family WHERE id_product=' . (int) $productId);
+                if ($assignment) {
+                    $where[] = 'g.id_profile=' . (int) $assignment['id_profile'] . ' AND g.sku_prefix=\'' . pSQL((string) $assignment['family_key']) . '\'';
+                } else {
+                    $where[] = '1=0';
+                }
+            } else {
+                $where[] = '1=0';
+            }
+        }
+
+        if (!empty($filters['feature_value_id']) && !empty($filters['feature_id'])) {
+            $joins .= ' INNER JOIN ' . _DB_PREFIX_ . 'po_link_product_family pf_filter ON pf_filter.id_profile = g.id_profile AND pf_filter.family_key = g.sku_prefix';
+            $joins .= ' INNER JOIN ' . _DB_PREFIX_ . 'feature_product fp ON fp.id_product = pf_filter.id_product';
+            $where[] = 'fp.id_feature=' . (int) $filters['feature_id'] . ' AND fp.id_feature_value=' . (int) $filters['feature_value_id'];
+        }
+
+        $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+
+        $total = (int) \Db::getInstance()->getValue('SELECT COUNT(DISTINCT g.id_group)
+            FROM ' . _DB_PREFIX_ . 'po_link_group g' . $joins . $whereSql);
+
+        $rows = \Db::getInstance()->executeS('SELECT g.id_group, g.id_profile, g.sku_prefix, g.updated_at, p.options_csv,
+            COUNT(DISTINCT pf2.id_product) AS product_count
+            FROM ' . _DB_PREFIX_ . 'po_link_group g' . $joins . '
+            LEFT JOIN ' . _DB_PREFIX_ . 'po_link_product_family pf2 ON pf2.id_profile = g.id_profile AND pf2.family_key = g.sku_prefix' .
+            $whereSql .
+            ' GROUP BY g.id_group
+              ORDER BY g.updated_at DESC
+              LIMIT ' . (int) $offset . ', ' . (int) $limit) ?: [];
+
+        $featureNames = $this->getFeatureOptions((int) $this->context->language->id);
+        foreach ($rows as &$row) {
+            $ids = array_filter(array_map('intval', array_map('trim', explode(',', (string) $row['options_csv']))));
+            $labels = [];
+            foreach ($ids as $id) {
+                $labels[] = $featureNames[$id] ?? ('#' . $id);
+            }
+            $row['features_label'] = $labels ? implode(', ', $labels) : '-';
+        }
+        unset($row);
+
+        return ['rows' => $rows, 'total' => $total];
+    }
+
+    protected function getGroup(int $groupId): ?array
+    {
+        $row = \Db::getInstance()->getRow('SELECT g.id_group, g.id_profile, g.sku_prefix, g.updated_at, p.options_csv
+            FROM ' . _DB_PREFIX_ . 'po_link_group g
+            INNER JOIN ' . _DB_PREFIX_ . 'po_link_profile p ON p.id_profile = g.id_profile
+            WHERE g.id_group=' . (int) $groupId);
+
+        if (!$row) {
+            return null;
+        }
+
+        $features = $this->getFeatureOptions((int) $this->context->language->id);
+        $ids = array_filter(array_map('intval', array_map('trim', explode(',', (string) $row['options_csv']))));
+        $labels = [];
+        foreach ($ids as $id) {
+            $labels[] = $features[$id] ?? ('#' . $id);
+        }
+        $row['features_label'] = $labels ? implode(', ', $labels) : '-';
+
+        return $row;
+    }
+
+    protected function getGroupFilters(): array
+    {
+        return [
+            'prefix' => trim((string) Tools::getValue('filter_prefix')),
+            'feature_id' => (int) Tools::getValue('filter_feature_id'),
+            'feature_value_id' => (int) Tools::getValue('filter_feature_value_id'),
+            'sku' => trim((string) Tools::getValue('filter_sku')),
+            'product_id' => (int) Tools::getValue('filter_product_id'),
+        ];
+    }
+
+    protected function buildQuery(array $filters): string
+    {
+        $data = [];
+        foreach ($filters as $key => $value) {
+            if ($value === null || $value === '' || $value === 0) {
+                continue;
+            }
+            $data['filter_' . $key] = $value;
+        }
+
+        return $data ? '&' . http_build_query($data) : '';
+    }
+
+    protected function getGroupService(): \PoLinkedProductFeatures\Service\LinkedProductGroupService
+    {
+        return new \PoLinkedProductFeatures\Service\LinkedProductGroupService($this, $this->context);
+    }
+
     protected function saveProfileFromRequest(): array
     {
         $db = \Db::getInstance();
@@ -413,6 +818,7 @@ class Po_linkedproduct_features extends Module
         $db->delete('po_link_profile', 'id_profile=' . (int) $profileId);
         $db->delete('po_link_product_family', 'id_profile=' . (int) $profileId);
         $db->delete('po_link_index', 'id_profile=' . (int) $profileId);
+        $db->delete('po_link_group', 'id_profile=' . (int) $profileId);
     }
 
     protected function getFeatureOptions(int $idLang): array
@@ -538,6 +944,7 @@ class Po_linkedproduct_features extends Module
         if ($profileId > 0 && $familyKey !== '') {
             $db->execute('REPLACE INTO ' . _DB_PREFIX_ . "po_link_product_family (id_product, id_profile, family_key, updated_at)
                 VALUES (" . (int) $productId . ", " . (int) $profileId . ", '" . pSQL($familyKey) . "', NOW())");
+            $this->ensureGroupExists($profileId, $familyKey);
             $this->assignFamilyByReferencePrefix($profileId, $familyKey);
             return true;
         }
@@ -577,5 +984,30 @@ class Po_linkedproduct_features extends Module
         foreach ($rows as $row) {
             $this->updateFeatureIndexForProduct((int) $row['id_product']);
         }
+
+        $this->touchGroupUpdatedAt($profileId, $referencePrefix);
+    }
+
+    protected function ensureGroupExists(int $profileId, string $referencePrefix): void
+    {
+        if ($profileId <= 0 || $referencePrefix === '') {
+            return;
+        }
+
+        $db = \Db::getInstance();
+        $db->execute('INSERT IGNORE INTO ' . _DB_PREFIX_ . "po_link_group (id_profile, sku_prefix, created_at, updated_at)
+            VALUES (" . (int) $profileId . ", '" . pSQL($referencePrefix) . "', NOW(), NOW())");
+    }
+
+    protected function touchGroupUpdatedAt(int $profileId, string $referencePrefix): void
+    {
+        if ($profileId <= 0 || $referencePrefix === '') {
+            return;
+        }
+
+        $db = \Db::getInstance();
+        $db->execute('UPDATE ' . _DB_PREFIX_ . "po_link_group
+            SET updated_at = NOW()
+            WHERE id_profile=" . (int) $profileId . " AND sku_prefix='" . pSQL($referencePrefix) . "'");
     }
 }
