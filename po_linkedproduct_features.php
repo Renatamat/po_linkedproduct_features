@@ -6,6 +6,10 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+}
+
 class Po_linkedproduct_features extends Module
 {
     /** @var string */
@@ -15,7 +19,7 @@ class Po_linkedproduct_features extends Module
     {
         $this->name = 'po_linkedproduct_features';
         $this->tab = 'administration';
-        $this->version = '1.0.0';
+        $this->version = '1.0.1';
         $this->author = 'Przemysław Markiewicz';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -25,13 +29,16 @@ class Po_linkedproduct_features extends Module
         $this->displayName = $this->l('Linkowanie po cechach i rodzinie');
         $this->description = $this->l('Moduł do linkowania produktów po cechach i rodzinie.');
 
-        $this->ps_versions_compliancy = ['min' => '8.0.0', 'max' => _PS_VERSION_];
+        $this->ps_versions_compliancy = ['min' => '8.2.0', 'max' => _PS_VERSION_];
         $this->languages = \Language::getLanguages(false);
     }
 
     public function install()
     {
-        include dirname(__FILE__) . '/sql/features_install.php';
+        $sqlResult = include __DIR__ . '/sql/features_install.php';
+        if ($sqlResult === false) {
+            return false;
+        }
 
         return parent::install()
             && $this->registerHook('displayAdminProductsExtra')
@@ -44,7 +51,10 @@ class Po_linkedproduct_features extends Module
 
     public function uninstall()
     {
-        include dirname(__FILE__) . '/sql/features_uninstall.php';
+        $sqlResult = include __DIR__ . '/sql/features_uninstall.php';
+        if ($sqlResult === false) {
+            return false;
+        }
 
         return parent::uninstall();
     }
@@ -114,22 +124,11 @@ class Po_linkedproduct_features extends Module
     public function hookDisplayHeader($params)
     {
         $this->context->controller->registerJavascript(
-            'modules-po_linkedproduct_features-powertip',
-            'modules/' . $this->name . '/views/js/jquery.powertip.min.js',
-            ['position' => 'head', 'priority' => 100]
-        );
-
-        $this->context->controller->registerJavascript(
             'modules-po_linkedproduct_features-front',
             'modules/' . $this->name . '/views/js/front.js',
             ['position' => 'bottom', 'priority' => 200]
         );
 
-        $this->context->controller->registerStylesheet(
-            'modules-po_linkedproduct_features-style',
-            'modules/' . $this->name . '/views/css/jquery.powertip.min.css',
-            ['media' => 'all', 'priority' => 100]
-        );
         $this->context->controller->registerStylesheet(
             'modules-po_linkedproduct_features-style-front',
             'modules/' . $this->name . '/views/css/front.css',
