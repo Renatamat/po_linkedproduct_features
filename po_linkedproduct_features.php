@@ -49,7 +49,8 @@ class Po_linkedproduct_features extends Module
             && $this->registerHook('displayHeader')
             && $this->registerHook('actionProductUpdate')
             && $this->registerHook('actionObjectProductAddAfter')
-            && $this->registerHook('actionObjectProductUpdateAfter');
+            && $this->registerHook('actionObjectProductUpdateAfter')
+            && $this->installTab();
     }
 
     public function uninstall()
@@ -59,7 +60,40 @@ class Po_linkedproduct_features extends Module
             return false;
         }
 
-        return parent::uninstall();
+        return parent::uninstall()
+            && $this->uninstallTab();
+    }
+
+    public function installTab(): bool
+    {
+        $tabClass = 'AdminPoLinkedProductGroups';
+        if ((int) \Tab::getIdFromClassName($tabClass) > 0) {
+            return true;
+        }
+
+        $tab = new \Tab();
+        $tab->active = 1;
+        $tab->class_name = $tabClass;
+        $tab->module = $this->name;
+        $tab->id_parent = (int) \Tab::getIdFromClassName('AdminParentModulesSf');
+        $tab->name = [];
+        foreach (\Language::getLanguages(false) as $lang) {
+            $tab->name[(int) $lang['id_lang']] = $this->l('Powiązania produktów');
+        }
+
+        return (bool) $tab->add();
+    }
+
+    public function uninstallTab(): bool
+    {
+        $tabId = (int) \Tab::getIdFromClassName('AdminPoLinkedProductGroups');
+        if ($tabId <= 0) {
+            return true;
+        }
+
+        $tab = new \Tab($tabId);
+
+        return (bool) $tab->delete();
     }
 
     public function getContent()
