@@ -326,10 +326,6 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
             $where[] = 'g.sku_prefix LIKE \'%' . pSQL($filters['prefix']) . '%\'';
         }
 
-        if (!empty($filters['feature_id'])) {
-            $where[] = 'FIND_IN_SET(' . (int) $filters['feature_id'] . ', p.options_csv)';
-        }
-
         if (!empty($filters['product_id']) || !empty($filters['sku'])) {
             $productId = (int) $filters['product_id'];
             if ($productId <= 0 && !empty($filters['sku'])) {
@@ -345,12 +341,6 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
             } else {
                 $where[] = '1=0';
             }
-        }
-
-        if (!empty($filters['feature_value_id']) && !empty($filters['feature_id'])) {
-            $joins .= ' INNER JOIN ' . _DB_PREFIX_ . 'po_link_product_family pf_filter ON pf_filter.id_profile = g.id_profile AND pf_filter.family_key = g.sku_prefix';
-            $joins .= ' INNER JOIN ' . _DB_PREFIX_ . 'feature_product fp ON fp.id_product = pf_filter.id_product';
-            $where[] = 'fp.id_feature=' . (int) $filters['feature_id'] . ' AND fp.id_feature_value=' . (int) $filters['feature_value_id'];
         }
 
         $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
@@ -407,8 +397,6 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
     {
         return [
             'prefix' => trim((string) Tools::getValue('filter_prefix')),
-            'feature_id' => (int) Tools::getValue('filter_feature_id'),
-            'feature_value_id' => (int) Tools::getValue('filter_feature_value_id'),
             'sku' => trim((string) Tools::getValue('filter_sku')),
             'product_id' => (int) Tools::getValue('filter_product_id'),
         ];

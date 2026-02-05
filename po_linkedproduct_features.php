@@ -310,7 +310,7 @@ class Po_linkedproduct_features extends Module
                 <div class="form-group">
                     <label class="control-label col-lg-3">' . $this->l('Cechy OPTIONS (max 3)') . '</label>
                     <div class="col-lg-9">
-                        <select name="profile_options[]" class="form-control" multiple>';
+                        <select name="profile_options[]" class="form-control" multiple size="10">';
 
         foreach ($featureOptions as $featureId => $featureName) {
             $output .= '<option value="' . (int) $featureId . '"' . (in_array($featureId, $selectedOptions, true) ? ' selected' : '') . '>'
@@ -649,10 +649,6 @@ class Po_linkedproduct_features extends Module
             $where[] = 'g.sku_prefix LIKE \'%' . pSQL($filters['prefix']) . '%\'';
         }
 
-        if (!empty($filters['feature_id'])) {
-            $where[] = 'FIND_IN_SET(' . (int) $filters['feature_id'] . ', p.options_csv)';
-        }
-
         if (!empty($filters['product_id']) || !empty($filters['sku'])) {
             $productId = (int) $filters['product_id'];
             if ($productId <= 0 && !empty($filters['sku'])) {
@@ -668,12 +664,6 @@ class Po_linkedproduct_features extends Module
             } else {
                 $where[] = '1=0';
             }
-        }
-
-        if (!empty($filters['feature_value_id']) && !empty($filters['feature_id'])) {
-            $joins .= ' INNER JOIN ' . _DB_PREFIX_ . 'po_link_product_family pf_filter ON pf_filter.id_profile = g.id_profile AND pf_filter.family_key = g.sku_prefix';
-            $joins .= ' INNER JOIN ' . _DB_PREFIX_ . 'feature_product fp ON fp.id_product = pf_filter.id_product';
-            $where[] = 'fp.id_feature=' . (int) $filters['feature_id'] . ' AND fp.id_feature_value=' . (int) $filters['feature_value_id'];
         }
 
         $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
@@ -730,8 +720,6 @@ class Po_linkedproduct_features extends Module
     {
         return [
             'prefix' => trim((string) Tools::getValue('filter_prefix')),
-            'feature_id' => (int) Tools::getValue('filter_feature_id'),
-            'feature_value_id' => (int) Tools::getValue('filter_feature_value_id'),
             'sku' => trim((string) Tools::getValue('filter_sku')),
             'product_id' => (int) Tools::getValue('filter_product_id'),
         ];

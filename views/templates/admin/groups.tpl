@@ -9,19 +9,6 @@
       <input type="text" name="filter_prefix" value="{$filters.prefix|escape:'html':'UTF-8'}" class="form-control">
     </div>
     <div class="form-group">
-      <label class="control-label">{l s='Cecha' mod='po_linkedproduct_features'}</label>
-      <select name="filter_feature_id" class="form-control">
-        <option value="">-</option>
-        {foreach from=$features key=featureId item=featureName}
-          <option value="{$featureId|intval}" {if $filters.feature_id == $featureId}selected{/if}>{$featureName|escape:'html':'UTF-8'}</option>
-        {/foreach}
-      </select>
-    </div>
-    <div class="form-group">
-      <label class="control-label">{l s='Wartość cechy (ID)' mod='po_linkedproduct_features'}</label>
-      <input type="number" name="filter_feature_value_id" value="{$filters.feature_value_id|escape:'html':'UTF-8'}" class="form-control" min="1">
-    </div>
-    <div class="form-group">
       <label class="control-label">{l s='SKU produktu' mod='po_linkedproduct_features'}</label>
       <input type="text" name="filter_sku" value="{$filters.sku|escape:'html':'UTF-8'}" class="form-control">
     </div>
