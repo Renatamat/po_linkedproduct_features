@@ -249,7 +249,6 @@ class Po_linkedproduct_features extends Module
         }
 
         $selectedOptions = $this->parseCsvIds($profile['options_csv'] ?? '');
-        $selectedFamily = $this->parseCsvIds($profile['family_csv'] ?? '');
 
         $output = '<div class="panel">
             <div class="panel-heading">' . $this->l('Profile linkowania po cechach') . '</div>
@@ -260,7 +259,6 @@ class Po_linkedproduct_features extends Module
                             <th>' . $this->l('ID') . '</th>
                             <th>' . $this->l('Nazwa') . '</th>
                             <th>' . $this->l('Options CSV') . '</th>
-                            <th>' . $this->l('Family CSV') . '</th>
                             <th>' . $this->l('Aktywny') . '</th>
                             <th>' . $this->l('Akcje') . '</th>
                         </tr>
@@ -268,14 +266,20 @@ class Po_linkedproduct_features extends Module
                     <tbody>';
 
         if (!$profiles) {
-            $output .= '<tr><td colspan="6">' . $this->l('Brak profili.') . '</td></tr>';
+            $output .= '<tr><td colspan="5">' . $this->l('Brak profili.') . '</td></tr>';
         } else {
             foreach ($profiles as $p) {
+                $optionsIds = $this->parseCsvIds((string) ($p['options_csv'] ?? ''));
+                $optionsLabels = [];
+                foreach ($optionsIds as $featureId) {
+                    $optionsLabels[] = $featureOptions[$featureId] ?? ('#' . $featureId);
+                }
+                $optionsLabel = $optionsLabels ? implode(', ', $optionsLabels) : '-';
+
                 $output .= '<tr>
                     <td>#' . (int) $p['id_profile'] . '</td>
                     <td>' . htmlspecialchars((string) $p['name']) . '</td>
-                    <td>' . htmlspecialchars((string) $p['options_csv']) . '</td>
-                    <td>' . htmlspecialchars((string) ($p['family_csv'] ?? '')) . '</td>
+                    <td>' . htmlspecialchars($optionsLabel) . '</td>
                     <td>' . ((int) $p['active'] === 1 ? '✅' : '❌') . '</td>
                     <td>
                         <a class="btn btn-default btn-xs" href="' . $this->context->link->getAdminLink('AdminModules', true)
@@ -306,7 +310,7 @@ class Po_linkedproduct_features extends Module
                 <div class="form-group">
                     <label class="control-label col-lg-3">' . $this->l('Cechy OPTIONS (max 3)') . '</label>
                     <div class="col-lg-9">
-                        <select name="profile_options[]" class="form-control" multiple>';
+                        <select name="profile_options[]" class="form-control" multiple size="10">';
 
         foreach ($featureOptions as $featureId => $featureName) {
             $output .= '<option value="' . (int) $featureId . '"' . (in_array($featureId, $selectedOptions, true) ? ' selected' : '') . '>'
@@ -315,19 +319,6 @@ class Po_linkedproduct_features extends Module
 
         $output .= '        </select>
                         <p class="help-block">' . $this->l('Wybierz 1-3 cechy do przełączników.') . '</p>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="control-label col-lg-3">' . $this->l('Cechy rodziny (opcjonalnie)') . '</label>
-                    <div class="col-lg-9">
-                        <select name="profile_family[]" class="form-control" multiple>';
-
-        foreach ($featureOptions as $featureId => $featureName) {
-            $output .= '<option value="' . (int) $featureId . '"' . (in_array($featureId, $selectedFamily, true) ? ' selected' : '') . '>'
-                . htmlspecialchars($featureName) . '</option>';
-        }
-
-        $output .= '        </select>
                     </div>
                 </div>
                 <div class="form-group">
@@ -487,6 +478,7 @@ class Po_linkedproduct_features extends Module
             'page_count' => (int) ceil($groupsData['total'] / self::GROUP_PAGE_SIZE),
             'filters' => $filters,
             'features' => $this->getFeatureOptions((int) $this->context->language->id),
+            'profiles' => $this->getProfileOptions(),
             'dry_run' => $this->groupDryRunData ?? null,
             'dry_run_input' => $this->groupDryRunInput ?? [],
             'current_url' => $currentUrl,
@@ -499,32 +491,27 @@ class Po_linkedproduct_features extends Module
 
     protected function processGroupDryRun(\PoLinkedProductFeatures\Service\LinkedProductGroupService $service): void
     {
-        [$prefix, $featureIds] = $this->validateGroupInput();
-        if (!$prefix || !$featureIds) {
+        [$prefix, $profileId, $featureIds] = $this->validateGroupInput();
+        if (!$prefix || !$profileId || !$featureIds) {
             return;
         }
 
         $this->groupDryRunData = $service->previewMatch($prefix, $featureIds, [], 10);
         $this->groupDryRunInput = [
             'prefix' => $prefix,
-            'feature_ids' => $featureIds,
+            'profile_id' => $profileId,
         ];
     }
 
     protected function processGroupCreate(\PoLinkedProductFeatures\Service\LinkedProductGroupService $service): void
     {
-        [$prefix, $featureIds] = $this->validateGroupInput();
-        if (!$prefix || !$featureIds) {
+        [$prefix, $profileId, $featureIds] = $this->validateGroupInput();
+        if (!$prefix || !$profileId || !$featureIds) {
             return;
         }
 
-        $profileName = trim((string) Tools::getValue('profile_name'));
-        if ($profileName === '') {
-            $profileName = $this->l('Grupa ') . $prefix;
-        }
-
         $db = \Db::getInstance();
-        $exists = (int) $db->getValue('SELECT id_group FROM ' . _DB_PREFIX_ . 'po_link_group WHERE sku_prefix=\'' . pSQL($prefix) . '\'');
+        $exists = (int) $db->getValue('SELECT id_group FROM ' . _DB_PREFIX_ . 'po_link_group WHERE sku_prefix=\'' . pSQL($prefix) . '\' AND id_profile=' . (int) $profileId);
         if ($exists > 0) {
             $this->_html .= $this->displayError($this->l('Grupa z tym prefiksem już istnieje.'));
             return;
@@ -532,14 +519,6 @@ class Po_linkedproduct_features extends Module
 
         $db->execute('START TRANSACTION');
         try {
-            $db->insert('po_link_profile', [
-                'name' => pSQL($profileName),
-                'options_csv' => pSQL(implode(',', $featureIds)),
-                'family_csv' => null,
-                'active' => 1,
-            ]);
-            $profileId = (int) $db->Insert_ID();
-
             $db->insert('po_link_group', [
                 'id_profile' => (int) $profileId,
                 'sku_prefix' => pSQL($prefix),
@@ -620,13 +599,16 @@ class Po_linkedproduct_features extends Module
     protected function validateGroupInput(): array
     {
         $prefix = strtoupper(trim((string) Tools::getValue('sku_prefix')));
-        $featureIds = Tools::getValue('feature_ids', []);
-        if (!is_array($featureIds)) {
-            $featureIds = [];
+        $profileId = (int) Tools::getValue('profile_id');
+        $featureIds = [];
+        if ($profileId > 0) {
+            $profile = \Db::getInstance()->getRow('SELECT options_csv FROM ' . _DB_PREFIX_ . 'po_link_profile WHERE id_profile=' . (int) $profileId);
+            if ($profile) {
+                $featureIds = array_values(array_unique(array_filter(array_map('intval', array_map('trim', explode(',', (string) $profile['options_csv']))), static function ($id) {
+                    return $id > 0;
+                })));
+            }
         }
-        $featureIds = array_values(array_unique(array_filter(array_map('intval', $featureIds), static function ($id) {
-            return $id > 0;
-        })));
 
         $hasError = false;
         if ($prefix === '') {
@@ -640,20 +622,23 @@ class Po_linkedproduct_features extends Module
             $hasError = true;
         }
 
-        if (count($featureIds) < 1 || count($featureIds) > 3) {
-            $this->_html .= $this->displayError($this->l('Wybierz od 1 do 3 cech.'));
+        if ($profileId <= 0) {
+            $this->_html .= $this->displayError($this->l('Wybierz profil linkowania.'));
+            $hasError = true;
+        } elseif (count($featureIds) < 1 || count($featureIds) > 3) {
+            $this->_html .= $this->displayError($this->l('Wybrany profil ma nieprawidłowe cechy.'));
             $hasError = true;
         }
 
         if ($hasError) {
             $this->groupDryRunInput = [
                 'prefix' => $prefix,
-                'feature_ids' => $featureIds,
+                'profile_id' => $profileId,
             ];
-            return [null, null];
+            return [null, null, []];
         }
 
-        return [$prefix, $featureIds];
+        return [$prefix, $profileId, $featureIds];
     }
 
     protected function getGroups(array $filters, int $offset, int $limit): array
@@ -662,10 +647,6 @@ class Po_linkedproduct_features extends Module
         $joins = ' INNER JOIN ' . _DB_PREFIX_ . 'po_link_profile p ON p.id_profile = g.id_profile';
         if (!empty($filters['prefix'])) {
             $where[] = 'g.sku_prefix LIKE \'%' . pSQL($filters['prefix']) . '%\'';
-        }
-
-        if (!empty($filters['feature_id'])) {
-            $where[] = 'FIND_IN_SET(' . (int) $filters['feature_id'] . ', p.options_csv)';
         }
 
         if (!empty($filters['product_id']) || !empty($filters['sku'])) {
@@ -683,12 +664,6 @@ class Po_linkedproduct_features extends Module
             } else {
                 $where[] = '1=0';
             }
-        }
-
-        if (!empty($filters['feature_value_id']) && !empty($filters['feature_id'])) {
-            $joins .= ' INNER JOIN ' . _DB_PREFIX_ . 'po_link_product_family pf_filter ON pf_filter.id_profile = g.id_profile AND pf_filter.family_key = g.sku_prefix';
-            $joins .= ' INNER JOIN ' . _DB_PREFIX_ . 'feature_product fp ON fp.id_product = pf_filter.id_product';
-            $where[] = 'fp.id_feature=' . (int) $filters['feature_id'] . ' AND fp.id_feature_value=' . (int) $filters['feature_value_id'];
         }
 
         $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
@@ -745,8 +720,6 @@ class Po_linkedproduct_features extends Module
     {
         return [
             'prefix' => trim((string) Tools::getValue('filter_prefix')),
-            'feature_id' => (int) Tools::getValue('filter_feature_id'),
-            'feature_value_id' => (int) Tools::getValue('filter_feature_value_id'),
             'sku' => trim((string) Tools::getValue('filter_sku')),
             'product_id' => (int) Tools::getValue('filter_product_id'),
         ];
@@ -776,7 +749,6 @@ class Po_linkedproduct_features extends Module
         $profileId = (int) Tools::getValue('profile_id');
         $name = trim((string) Tools::getValue('profile_name'));
         $options = Tools::getValue('profile_options', []);
-        $family = Tools::getValue('profile_family', []);
         $active = Tools::getValue('profile_active') ? 1 : 0;
 
         if ($name === '') {
@@ -787,10 +759,6 @@ class Po_linkedproduct_features extends Module
             $options = [];
         }
 
-        if (!is_array($family)) {
-            $family = [];
-        }
-
         $optionsCsv = $this->buildCsv($options);
         $optionIds = $this->parseCsvIds($optionsCsv);
 
@@ -798,12 +766,9 @@ class Po_linkedproduct_features extends Module
             throw new \RuntimeException($this->l('Wybierz od 1 do 3 cech w OPTIONS.'));
         }
 
-        $familyCsv = $this->buildCsv($family);
-
         $data = [
             'name' => pSQL($name),
             'options_csv' => pSQL($optionsCsv),
-            'family_csv' => $familyCsv !== '' ? pSQL($familyCsv) : null,
             'active' => (int) $active,
         ];
 
@@ -867,6 +832,11 @@ class Po_linkedproduct_features extends Module
         }
 
         return $options;
+    }
+
+    protected function getProfileOptions(): array
+    {
+        return \Db::getInstance()->executeS('SELECT id_profile, name FROM ' . _DB_PREFIX_ . 'po_link_profile ORDER BY name ASC') ?: [];
     }
 
     protected function parseCsvIds(?string $csv): array
