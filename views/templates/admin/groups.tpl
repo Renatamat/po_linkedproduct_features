@@ -1,34 +1,3 @@
-<div class="panel">
-  <h3><i class="icon-link"></i> {l s='Powiązania produktów' mod='po_linkedproduct_features'}</h3>
-  <form method="get" class="form-inline">
-    <input type="hidden" name="configure" value="po_linkedproduct_features">
-    <input type="hidden" name="lp_section" value="groups">
-    <input type="hidden" name="token" value="{$token|escape:'html':'UTF-8'}">
-    <div class="form-group">
-      <label class="control-label">{l s='Prefiks SKU' mod='po_linkedproduct_features'}</label>
-      <input type="text" name="filter_prefix" value="{$filters.prefix|escape:'html':'UTF-8'}" class="form-control">
-    </div>
-    <div class="form-group">
-      <label class="control-label">{l s='SKU produktu' mod='po_linkedproduct_features'}</label>
-      <input type="text" name="filter_sku" value="{$filters.sku|escape:'html':'UTF-8'}" class="form-control">
-    </div>
-    <div class="form-group">
-      <label class="control-label">{l s='Nazwa produktu' mod='po_linkedproduct_features'}</label>
-      <input type="text" name="filter_name" value="{$filters.name|escape:'html':'UTF-8'}" class="form-control">
-    </div>
-    <div class="form-group">
-      <label class="control-label">{l s='ID produktu' mod='po_linkedproduct_features'}</label>
-      <input type="text" name="filter_product_id" value="{$filters.product_id|escape:'html':'UTF-8'}" class="form-control">
-    </div>
-    <button type="submit" class="btn btn-default">
-      <i class="icon-search"></i> {l s='Szukaj' mod='po_linkedproduct_features'}
-    </button>
-    <a class="btn btn-default" href="{$current_url|escape:'html':'UTF-8'}">
-      <i class="icon-refresh"></i> {l s='Wyczyść' mod='po_linkedproduct_features'}
-    </a>
-  </form>
-</div>
-
   <form method="post">
     <input type="hidden" name="token" value="{$token|escape:'html':'UTF-8'}">
     <input type="hidden" name="configure" value="po_linkedproduct_features">

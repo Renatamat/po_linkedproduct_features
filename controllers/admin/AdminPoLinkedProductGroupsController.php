@@ -78,10 +78,10 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
         $page = max(1, (int) Tools::getValue('page'));
         $offset = ($page - 1) * self::PAGE_SIZE;
 
-        $groupsData = $this->getGroups($filters, $offset, self::PAGE_SIZE);
+        $groupsData = $this->getGroups([], $offset, self::PAGE_SIZE);
         $features = $this->getFeatureOptions();
         $profiles = $this->getProfileOptions();
-        $filterQuery = $this->buildQuery($filters);
+        $filterQuery = '';
 
         $this->context->smarty->assign([
             'groups' => $groupsData['rows'],
@@ -320,33 +320,8 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
 
     private function getGroups(array $filters, int $offset, int $limit): array
     {
-        $where = [];
+        $whereSql = '';
         $joins = ' INNER JOIN ' . _DB_PREFIX_ . 'po_link_profile p ON p.id_profile = g.id_profile';
-        if (!empty($filters['prefix'])) {
-            $where[] = 'g.sku_prefix LIKE \'%' . pSQL($filters['prefix']) . '%\'';
-        }
-
-        if (!empty($filters['product_id']) || !empty($filters['sku']) || !empty($filters['name'])) {
-            $productId = (int) $filters['product_id'];
-            if ($productId <= 0 && !empty($filters['sku'])) {
-                $productId = (int) Db::getInstance()->getValue('SELECT id_product FROM ' . _DB_PREFIX_ . 'product WHERE reference=\'' . pSQL($filters['sku']) . '\'');
-            }
-            if ($productId <= 0 && !empty($filters['name'])) {
-                $productId = (int) Db::getInstance()->getValue('SELECT id_product FROM ' . _DB_PREFIX_ . 'product_lang WHERE name LIKE \'%' . pSQL($filters['name']) . '%\' AND id_lang=' . (int) $this->context->language->id);
-            }
-            if ($productId > 0) {
-                $assignment = Db::getInstance()->getRow('SELECT id_profile, family_key FROM ' . _DB_PREFIX_ . 'po_link_product_family WHERE id_product=' . (int) $productId);
-                if ($assignment) {
-                    $where[] = 'g.id_profile=' . (int) $assignment['id_profile'] . ' AND g.sku_prefix=\'' . pSQL((string) $assignment['family_key']) . '\'';
-                } else {
-                    $where[] = '1=0';
-                }
-            } else {
-                $where[] = '1=0';
-            }
-        }
-
-        $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
         $total = (int) Db::getInstance()->getValue('SELECT COUNT(DISTINCT g.id_group)
             FROM ' . _DB_PREFIX_ . 'po_link_group g' . $joins . $whereSql);
@@ -398,12 +373,7 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
 
     private function getListFilters(): array
     {
-        return [
-            'prefix' => trim((string) Tools::getValue('filter_prefix')),
-            'sku' => trim((string) Tools::getValue('filter_sku')),
-            'name' => trim((string) Tools::getValue('filter_name')),
-            'product_id' => (int) Tools::getValue('filter_product_id'),
-        ];
+        return [];
     }
 
     private function getFeatureOptions(): array
