@@ -146,24 +146,49 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
         $currentOptions = $productOptions[$productId] ?? [];
         $featurePositions = [];
 
+        $missingLabel = $this->module->l('Brak', 'displayproductlinkedfeatures');
+
         foreach ($optionIds as $featureId) {
             $values = array_keys($featureValues[$featureId] ?? []);
+            $hasMissing = false;
+            foreach ($productOptions as $candidateOptions) {
+                if (!array_key_exists($featureId, $candidateOptions)) {
+                    $hasMissing = true;
+                    break;
+                }
+            }
+            if ($hasMissing) {
+                $values[] = 0;
+            }
             $valueEntries = [];
             foreach ($values as $valueId) {
                 $expected = $currentOptions;
-                $expected[$featureId] = $valueId;
+                if ($valueId === 0) {
+                    unset($expected[$featureId]);
+                } else {
+                    $expected[$featureId] = $valueId;
+                }
 
                 $targetProductId = null;
+                $isExact = false;
                 foreach ($productOptions as $candidateId => $candidateOptions) {
                     $match = true;
-                    foreach ($expected as $checkFeatureId => $checkValueId) {
-                        if (!isset($candidateOptions[$checkFeatureId]) || $candidateOptions[$checkFeatureId] !== $checkValueId) {
-                            $match = false;
-                            break;
+                    foreach ($optionIds as $checkFeatureId) {
+                        if (array_key_exists($checkFeatureId, $expected)) {
+                            if (!isset($candidateOptions[$checkFeatureId]) || $candidateOptions[$checkFeatureId] !== $expected[$checkFeatureId]) {
+                                $match = false;
+                                break;
+                            }
+                        } else {
+                            if (array_key_exists($checkFeatureId, $candidateOptions)) {
+                                $match = false;
+                                break;
+                            }
                         }
                     }
                     if ($match) {
                         $targetProductId = $candidateId;
+                        $isExact = true;
                         if ($candidateId === $productId) {
                             break;
                         }
@@ -174,8 +199,14 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
                     $bestScore = -1;
                     $maxScore = max(0, count($currentOptions) - 1);
                     foreach ($productOptions as $candidateId => $candidateOptions) {
-                        if (!isset($candidateOptions[$featureId]) || $candidateOptions[$featureId] !== $valueId) {
-                            continue;
+                        if ($valueId === 0) {
+                            if (array_key_exists($featureId, $candidateOptions)) {
+                                continue;
+                            }
+                        } else {
+                            if (!isset($candidateOptions[$featureId]) || $candidateOptions[$featureId] !== $valueId) {
+                                continue;
+                            }
                         }
                         $score = 0;
                         foreach ($currentOptions as $currentFeatureId => $currentValueId) {
@@ -198,10 +229,11 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
 
                 $valueEntries[] = [
                     'value_id' => $valueId,
-                    'label' => $valueNameMap[$featureId][$valueId] ?? (string) $valueId,
+                    'label' => $valueId === 0 ? $missingLabel : ($valueNameMap[$featureId][$valueId] ?? (string) $valueId),
                     'product_id' => $targetProductId,
                     'active' => $targetProductId === $productId,
                     'disabled' => $targetProductId === null,
+                    'muted' => $targetProductId !== null && !$isExact,
                     'link' => $targetProductId ? $this->context->link->getProductLink($targetProductId) : null,
                 ];
             }

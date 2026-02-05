@@ -37,6 +37,10 @@
   color: var(--po-linked-primary);
 }
 
+.type-list li a.is-muted {
+  opacity: 0.45;
+}
+
 .type-list-text {
   display: flex;
   gap: 0.5rem;
