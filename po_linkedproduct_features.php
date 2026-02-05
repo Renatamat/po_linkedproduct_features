@@ -115,7 +115,7 @@ class Po_linkedproduct_features extends Module
 
     public function hookDisplayProductLinked($params)
     {
-        $hook = new \Piano\LinkedProduct\Hook\DisplayProductLinkedFeatures($this, \Context::getContext());
+        $hook = new \PoLinkedProductFeatures\Hook\DisplayProductLinkedFeatures($this, \Context::getContext());
 
         return $hook->run($params);
     }
