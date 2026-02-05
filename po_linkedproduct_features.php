@@ -18,7 +18,7 @@ class Po_linkedproduct_features extends Module
     {
         $this->name = 'po_linkedproduct_features';
         $this->tab = 'administration';
-        $this->version = '1.0.1';
+        $this->version = '1.1.0';
         $this->author = 'Przemysław Markiewicz';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -45,7 +45,8 @@ class Po_linkedproduct_features extends Module
             && $this->registerHook('displayHeader')
             && $this->registerHook('actionProductUpdate')
             && $this->registerHook('actionObjectProductAddAfter')
-            && $this->registerHook('actionObjectProductUpdateAfter');
+            && $this->registerHook('actionObjectProductUpdateAfter')
+            && $this->installTab();
     }
 
     public function uninstall()
@@ -55,7 +56,40 @@ class Po_linkedproduct_features extends Module
             return false;
         }
 
-        return parent::uninstall();
+        return parent::uninstall()
+            && $this->uninstallTab();
+    }
+
+    public function installTab(): bool
+    {
+        $tabClass = 'AdminPoLinkedProductGroups';
+        if ((int) \Tab::getIdFromClassName($tabClass) > 0) {
+            return true;
+        }
+
+        $tab = new \Tab();
+        $tab->active = 1;
+        $tab->class_name = $tabClass;
+        $tab->module = $this->name;
+        $tab->id_parent = (int) \Tab::getIdFromClassName('AdminParentModulesSf');
+        $tab->name = [];
+        foreach (\Language::getLanguages(false) as $lang) {
+            $tab->name[(int) $lang['id_lang']] = $this->l('Powiązania produktów');
+        }
+
+        return (bool) $tab->add();
+    }
+
+    public function uninstallTab(): bool
+    {
+        $tabId = (int) \Tab::getIdFromClassName('AdminPoLinkedProductGroups');
+        if ($tabId <= 0) {
+            return true;
+        }
+
+        $tab = new \Tab($tabId);
+
+        return (bool) $tab->delete();
     }
 
     public function getContent()
@@ -413,6 +447,7 @@ class Po_linkedproduct_features extends Module
         $db->delete('po_link_profile', 'id_profile=' . (int) $profileId);
         $db->delete('po_link_product_family', 'id_profile=' . (int) $profileId);
         $db->delete('po_link_index', 'id_profile=' . (int) $profileId);
+        $db->delete('po_link_group', 'id_profile=' . (int) $profileId);
     }
 
     protected function getFeatureOptions(int $idLang): array
@@ -538,6 +573,7 @@ class Po_linkedproduct_features extends Module
         if ($profileId > 0 && $familyKey !== '') {
             $db->execute('REPLACE INTO ' . _DB_PREFIX_ . "po_link_product_family (id_product, id_profile, family_key, updated_at)
                 VALUES (" . (int) $productId . ", " . (int) $profileId . ", '" . pSQL($familyKey) . "', NOW())");
+            $this->ensureGroupExists($profileId, $familyKey);
             $this->assignFamilyByReferencePrefix($profileId, $familyKey);
             return true;
         }
@@ -577,5 +613,30 @@ class Po_linkedproduct_features extends Module
         foreach ($rows as $row) {
             $this->updateFeatureIndexForProduct((int) $row['id_product']);
         }
+
+        $this->touchGroupUpdatedAt($profileId, $referencePrefix);
+    }
+
+    protected function ensureGroupExists(int $profileId, string $referencePrefix): void
+    {
+        if ($profileId <= 0 || $referencePrefix === '') {
+            return;
+        }
+
+        $db = \Db::getInstance();
+        $db->execute('INSERT IGNORE INTO ' . _DB_PREFIX_ . "po_link_group (id_profile, sku_prefix, created_at, updated_at)
+            VALUES (" . (int) $profileId . ", '" . pSQL($referencePrefix) . "', NOW(), NOW())");
+    }
+
+    protected function touchGroupUpdatedAt(int $profileId, string $referencePrefix): void
+    {
+        if ($profileId <= 0 || $referencePrefix === '') {
+            return;
+        }
+
+        $db = \Db::getInstance();
+        $db->execute('UPDATE ' . _DB_PREFIX_ . "po_link_group
+            SET updated_at = NOW()
+            WHERE id_profile=" . (int) $profileId . " AND sku_prefix='" . pSQL($referencePrefix) . "'");
     }
 }
