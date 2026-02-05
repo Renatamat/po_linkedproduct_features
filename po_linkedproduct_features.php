@@ -649,10 +649,13 @@ class Po_linkedproduct_features extends Module
             $where[] = 'g.sku_prefix LIKE \'%' . pSQL($filters['prefix']) . '%\'';
         }
 
-        if (!empty($filters['product_id']) || !empty($filters['sku'])) {
+        if (!empty($filters['product_id']) || !empty($filters['sku']) || !empty($filters['name'])) {
             $productId = (int) $filters['product_id'];
             if ($productId <= 0 && !empty($filters['sku'])) {
                 $productId = (int) \Db::getInstance()->getValue('SELECT id_product FROM ' . _DB_PREFIX_ . 'product WHERE reference=\'' . pSQL($filters['sku']) . '\'');
+            }
+            if ($productId <= 0 && !empty($filters['name'])) {
+                $productId = (int) \Db::getInstance()->getValue('SELECT id_product FROM ' . _DB_PREFIX_ . 'product_lang WHERE name LIKE \'%' . pSQL($filters['name']) . '%\' AND id_lang=' . (int) $this->context->language->id);
             }
             if ($productId > 0) {
                 $assignment = \Db::getInstance()->getRow('SELECT id_profile, family_key FROM ' . _DB_PREFIX_ . 'po_link_product_family WHERE id_product=' . (int) $productId);
@@ -721,6 +724,7 @@ class Po_linkedproduct_features extends Module
         return [
             'prefix' => trim((string) Tools::getValue('filter_prefix')),
             'sku' => trim((string) Tools::getValue('filter_sku')),
+            'name' => trim((string) Tools::getValue('filter_name')),
             'product_id' => (int) Tools::getValue('filter_product_id'),
         ];
     }

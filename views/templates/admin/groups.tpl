@@ -13,8 +13,12 @@
       <input type="text" name="filter_sku" value="{$filters.sku|escape:'html':'UTF-8'}" class="form-control">
     </div>
     <div class="form-group">
+      <label class="control-label">{l s='Nazwa produktu' mod='po_linkedproduct_features'}</label>
+      <input type="text" name="filter_name" value="{$filters.name|escape:'html':'UTF-8'}" class="form-control">
+    </div>
+    <div class="form-group">
       <label class="control-label">{l s='ID produktu' mod='po_linkedproduct_features'}</label>
-      <input type="number" name="filter_product_id" value="{$filters.product_id|escape:'html':'UTF-8'}" class="form-control" min="1">
+      <input type="text" name="filter_product_id" value="{$filters.product_id|escape:'html':'UTF-8'}" class="form-control">
     </div>
     <button type="submit" class="btn btn-default">
       <i class="icon-search"></i> {l s='Szukaj' mod='po_linkedproduct_features'}
