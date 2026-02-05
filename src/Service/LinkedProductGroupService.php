@@ -69,8 +69,8 @@ class LinkedProductGroupService
             if ($productIds) {
                 $values = [];
                 foreach ($productIds as $productId) {
-                    $values[] = '(' . (int) $productId . ', ' . (int) $group['id_profile'] . ', \'
-                        . pSQL((string) $group['sku_prefix']) . '\', NOW())';
+                    $values[] = '(' . (int) $productId . ', ' . (int) $group['id_profile'] . ", '"
+                        . pSQL((string) $group['sku_prefix']) . "', NOW())";
                 }
 
                 foreach (array_chunk($values, 200) as $chunk) {
