@@ -1,0 +1,186 @@
+<div class="panel">
+  <h3><i class="icon-link"></i> {l s='Powiązania produktów' mod='po_linkedproduct_features'}</h3>
+  <form method="get" class="form-inline">
+    <input type="hidden" name="configure" value="po_linkedproduct_features">
+    <input type="hidden" name="lp_section" value="groups">
+    <input type="hidden" name="token" value="{$token|escape:'html':'UTF-8'}">
+    <div class="form-group">
+      <label class="control-label">{l s='Prefiks SKU' mod='po_linkedproduct_features'}</label>
+      <input type="text" name="filter_prefix" value="{$filters.prefix|escape:'html':'UTF-8'}" class="form-control">
+    </div>
+    <div class="form-group">
+      <label class="control-label">{l s='Cecha' mod='po_linkedproduct_features'}</label>
+      <select name="filter_feature_id" class="form-control">
+        <option value="">-</option>
+        {foreach from=$features key=featureId item=featureName}
+          <option value="{$featureId|intval}" {if $filters.feature_id == $featureId}selected{/if}>{$featureName|escape:'html':'UTF-8'}</option>
+        {/foreach}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="control-label">{l s='Wartość cechy (ID)' mod='po_linkedproduct_features'}</label>
+      <input type="number" name="filter_feature_value_id" value="{$filters.feature_value_id|escape:'html':'UTF-8'}" class="form-control" min="1">
+    </div>
+    <div class="form-group">
+      <label class="control-label">{l s='SKU produktu' mod='po_linkedproduct_features'}</label>
+      <input type="text" name="filter_sku" value="{$filters.sku|escape:'html':'UTF-8'}" class="form-control">
+    </div>
+    <div class="form-group">
+      <label class="control-label">{l s='ID produktu' mod='po_linkedproduct_features'}</label>
+      <input type="number" name="filter_product_id" value="{$filters.product_id|escape:'html':'UTF-8'}" class="form-control" min="1">
+    </div>
+    <button type="submit" class="btn btn-default">
+      <i class="icon-search"></i> {l s='Szukaj' mod='po_linkedproduct_features'}
+    </button>
+    <a class="btn btn-default" href="{$current_url|escape:'html':'UTF-8'}">
+      <i class="icon-refresh"></i> {l s='Wyczyść' mod='po_linkedproduct_features'}
+    </a>
+  </form>
+</div>
+
+  <form method="post">
+    <input type="hidden" name="token" value="{$token|escape:'html':'UTF-8'}">
+    <input type="hidden" name="configure" value="po_linkedproduct_features">
+    <input type="hidden" name="lp_section" value="groups">
+    <input type="hidden" name="lp_action" value="bulk_delete">
+  <div class="panel">
+    <h3><i class="icon-list"></i> {l s='Lista grup' mod='po_linkedproduct_features'}</h3>
+    <div class="table-responsive">
+      <table class="table">
+        <thead>
+          <tr>
+            <th><input type="checkbox" onclick="$('.lp-group-checkbox').prop('checked', this.checked);"></th>
+            <th>{l s='ID' mod='po_linkedproduct_features'}</th>
+            <th>{l s='Prefiks SKU' mod='po_linkedproduct_features'}</th>
+            <th>{l s='Cechy' mod='po_linkedproduct_features'}</th>
+            <th>{l s='Liczba produktów' mod='po_linkedproduct_features'}</th>
+            <th>{l s='Aktualizacja' mod='po_linkedproduct_features'}</th>
+            <th>{l s='Akcje' mod='po_linkedproduct_features'}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {if $groups|@count == 0}
+            <tr>
+              <td colspan="7">{l s='Brak grup do wyświetlenia.' mod='po_linkedproduct_features'}</td>
+            </tr>
+          {else}
+            {foreach from=$groups item=group}
+              <tr>
+                <td><input type="checkbox" class="lp-group-checkbox" name="group_ids[]" value="{$group.id_group|intval}"></td>
+                <td>#{$group.id_group|intval}</td>
+                <td>{$group.sku_prefix|escape:'html':'UTF-8'}</td>
+                <td>{$group.features_label|escape:'html':'UTF-8'}</td>
+                <td>{$group.product_count|intval}</td>
+                <td>{$group.updated_at|escape:'html':'UTF-8'}</td>
+                <td>
+                  <a class="btn btn-default btn-xs" href="{$current_url|escape:'html':'UTF-8'}&view=1&id_group={$group.id_group|intval}">
+                    {l s='Podgląd' mod='po_linkedproduct_features'}
+                  </a>
+                  <button type="submit" name="lp_action" value="rebuild_group" class="btn btn-default btn-xs" formaction="{$current_url|escape:'html':'UTF-8'}&id_group={$group.id_group|intval}" onclick="return confirm('{l s='Przebudować grupę?' mod='po_linkedproduct_features'}');">
+                    {l s='Przelicz' mod='po_linkedproduct_features'}
+                  </button>
+                  <button type="submit" name="lp_action" value="delete_group" class="btn btn-danger btn-xs" formaction="{$current_url|escape:'html':'UTF-8'}&id_group={$group.id_group|intval}" onclick="return confirm('{l s='Usunąć grupę?' mod='po_linkedproduct_features'}');">
+                    {l s='Usuń' mod='po_linkedproduct_features'}
+                  </button>
+                </td>
+              </tr>
+            {/foreach}
+          {/if}
+        </tbody>
+      </table>
+    </div>
+    <div class="panel-footer">
+      <button type="submit" class="btn btn-danger" onclick="return confirm('{l s='Usunąć zaznaczone grupy?' mod='po_linkedproduct_features'}');">
+        <i class="icon-trash"></i> {l s='Usuń zaznaczone' mod='po_linkedproduct_features'}
+      </button>
+    </div>
+    {if $total > $page_size}
+      <div class="panel-footer">
+        {assign var=page_count value=($total / $page_size)|ceil}
+        <ul class="pagination">
+          {if $page > 1}
+            <li><a href="{$current_url|escape:'html':'UTF-8'}&page={$page-1}{$filter_query|escape:'html':'UTF-8'}">&laquo;</a></li>
+          {/if}
+          {section name=pages start=1 loop=$page_count+1}
+            <li class="{if $smarty.section.pages.index == $page}active{/if}">
+              <a href="{$current_url|escape:'html':'UTF-8'}&page={$smarty.section.pages.index}{$filter_query|escape:'html':'UTF-8'}">{$smarty.section.pages.index}</a>
+            </li>
+          {/section}
+          {if $page < $page_count}
+            <li><a href="{$current_url|escape:'html':'UTF-8'}&page={$page+1}{$filter_query|escape:'html':'UTF-8'}">&raquo;</a></li>
+          {/if}
+        </ul>
+      </div>
+    {/if}
+  </div>
+</form>
+
+<div class="panel">
+  <h3><i class="icon-plus"></i> {l s='Dodaj regułę/grupę' mod='po_linkedproduct_features'}</h3>
+  <form method="post" class="defaultForm form-horizontal">
+    <input type="hidden" name="token" value="{$token|escape:'html':'UTF-8'}">
+    <input type="hidden" name="configure" value="po_linkedproduct_features">
+    <input type="hidden" name="lp_section" value="groups">
+    <div class="form-group">
+      <label class="control-label col-lg-3">{l s='Prefiks SKU' mod='po_linkedproduct_features'}</label>
+      <div class="col-lg-9">
+        <input type="text" name="sku_prefix" class="form-control" value="{$dry_run_input.prefix|default:''|escape:'html':'UTF-8'}" required>
+        <p class="help-block">{l s='Dozwolone znaki: A-Z, 0-9, -, _' mod='po_linkedproduct_features'}</p>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="control-label col-lg-3">{l s='Cechy (1-3)' mod='po_linkedproduct_features'}</label>
+      <div class="col-lg-9">
+        <select name="feature_ids[]" class="form-control" multiple required>
+          {foreach from=$features key=featureId item=featureName}
+            <option value="{$featureId|intval}" {if isset($dry_run_input.feature_ids) && in_array($featureId, $dry_run_input.feature_ids)}selected{/if}>{$featureName|escape:'html':'UTF-8'}</option>
+          {/foreach}
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="control-label col-lg-3">{l s='Nazwa profilu (opcjonalnie)' mod='po_linkedproduct_features'}</label>
+      <div class="col-lg-9">
+        <input type="text" name="profile_name" class="form-control" value="">
+      </div>
+    </div>
+    <div class="panel-footer">
+      <button type="submit" name="lp_action" value="dry_run" class="btn btn-default">
+        <i class="icon-eye"></i> {l s='Podgląd dopasowania' mod='po_linkedproduct_features'}
+      </button>
+      <button type="submit" name="lp_action" value="create_group" class="btn btn-primary pull-right" onclick="return confirm('{l s='Utworzyć grupę i wygenerować powiązania?' mod='po_linkedproduct_features'}');">
+        <i class="icon-save"></i> {l s='Zapisz regułę' mod='po_linkedproduct_features'}
+      </button>
+    </div>
+  </form>
+
+  {if $dry_run}
+    <hr>
+    <h4>{l s='Podgląd dopasowania' mod='po_linkedproduct_features'}</h4>
+    <p>{l s='Liczba produktów' mod='po_linkedproduct_features'}: <strong>{$dry_run.count|intval}</strong></p>
+    {if $dry_run.rows|@count > 0}
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>{l s='ID' mod='po_linkedproduct_features'}</th>
+              <th>{l s='Nazwa' mod='po_linkedproduct_features'}</th>
+              <th>{l s='SKU' mod='po_linkedproduct_features'}</th>
+              <th>{l s='Aktywny' mod='po_linkedproduct_features'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {foreach from=$dry_run.rows item=row}
+              <tr>
+                <td>{$row.id_product|intval}</td>
+                <td>{$row.name|escape:'html':'UTF-8'}</td>
+                <td>{$row.reference|escape:'html':'UTF-8'}</td>
+                <td>{if $row.active}{l s='Tak' mod='po_linkedproduct_features'}{else}{l s='Nie' mod='po_linkedproduct_features'}{/if}</td>
+              </tr>
+            {/foreach}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+  {/if}
+</div>
