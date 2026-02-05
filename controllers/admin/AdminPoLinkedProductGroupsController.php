@@ -78,9 +78,10 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
         $page = max(1, (int) Tools::getValue('page'));
         $offset = ($page - 1) * self::PAGE_SIZE;
 
-        $groupsData = $this->getGroups($filters, $offset, self::PAGE_SIZE);
+        $groupsData = $this->getGroups([], $offset, self::PAGE_SIZE);
         $features = $this->getFeatureOptions();
-        $filterQuery = $this->buildQuery($filters);
+        $profiles = $this->getProfileOptions();
+        $filterQuery = '';
 
         $this->context->smarty->assign([
             'groups' => $groupsData['rows'],
@@ -89,6 +90,7 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
             'page_size' => self::PAGE_SIZE,
             'filters' => $filters,
             'features' => $features,
+            'profiles' => $profiles,
             'dry_run' => $this->dryRunData,
             'dry_run_input' => $this->dryRunInput,
             'current_url' => $this->context->link->getAdminLink('AdminPoLinkedProductGroups'),
@@ -141,8 +143,8 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
             return;
         }
 
-        [$prefix, $featureIds] = $this->validateGroupInput();
-        if (!$prefix || !$featureIds) {
+        [$prefix, $profileId, $featureIds] = $this->validateGroupInput();
+        if (!$prefix || !$profileId || !$featureIds) {
             return;
         }
 
@@ -150,7 +152,7 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
         $this->dryRunData = $service->previewMatch($prefix, $featureIds, [], 10);
         $this->dryRunInput = [
             'prefix' => $prefix,
-            'feature_ids' => $featureIds,
+            'profile_id' => $profileId,
         ];
     }
 
@@ -161,18 +163,13 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
             return;
         }
 
-        [$prefix, $featureIds] = $this->validateGroupInput();
-        if (!$prefix || !$featureIds) {
+        [$prefix, $profileId, $featureIds] = $this->validateGroupInput();
+        if (!$prefix || !$profileId || !$featureIds) {
             return;
         }
 
-        $profileName = trim((string) Tools::getValue('profile_name'));
-        if ($profileName === '') {
-            $profileName = $this->l('Grupa ') . $prefix;
-        }
-
         $db = Db::getInstance();
-        $exists = (int) $db->getValue('SELECT id_group FROM ' . _DB_PREFIX_ . 'po_link_group WHERE sku_prefix=\'' . pSQL($prefix) . '\'');
+        $exists = (int) $db->getValue('SELECT id_group FROM ' . _DB_PREFIX_ . 'po_link_group WHERE sku_prefix=\'' . pSQL($prefix) . '\' AND id_profile=' . (int) $profileId);
         if ($exists > 0) {
             $this->errors[] = $this->l('Grupa z tym prefiksem już istnieje.');
             return;
@@ -180,14 +177,6 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
 
         $db->execute('START TRANSACTION');
         try {
-            $db->insert('po_link_profile', [
-                'name' => pSQL($profileName),
-                'options_csv' => pSQL(implode(',', $featureIds)),
-                'family_csv' => null,
-                'active' => 1,
-            ]);
-            $profileId = (int) $db->Insert_ID();
-
             $db->insert('po_link_group', [
                 'id_profile' => (int) $profileId,
                 'sku_prefix' => pSQL($prefix),
@@ -293,13 +282,16 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
     private function validateGroupInput(): array
     {
         $prefix = strtoupper(trim((string) Tools::getValue('sku_prefix')));
-        $featureIds = Tools::getValue('feature_ids', []);
-        if (!is_array($featureIds)) {
-            $featureIds = [];
+        $profileId = (int) Tools::getValue('profile_id');
+        $featureIds = [];
+        if ($profileId > 0) {
+            $profile = Db::getInstance()->getRow('SELECT options_csv FROM ' . _DB_PREFIX_ . 'po_link_profile WHERE id_profile=' . (int) $profileId);
+            if ($profile) {
+                $featureIds = array_values(array_unique(array_filter(array_map('intval', array_map('trim', explode(',', (string) $profile['options_csv']))), static function ($id) {
+                    return $id > 0;
+                })));
+            }
         }
-        $featureIds = array_values(array_unique(array_filter(array_map('intval', $featureIds), static function ($id) {
-            return $id > 0;
-        })));
 
         if ($prefix === '') {
             $this->errors[] = $this->l('Prefiks SKU jest wymagany.');
@@ -309,57 +301,27 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
             $this->errors[] = $this->l('Prefiks SKU ma niedozwolone znaki.');
         }
 
-        if (count($featureIds) < 1 || count($featureIds) > 3) {
-            $this->errors[] = $this->l('Wybierz od 1 do 3 cech.');
+        if ($profileId <= 0) {
+            $this->errors[] = $this->l('Wybierz profil linkowania.');
+        } elseif (count($featureIds) < 1 || count($featureIds) > 3) {
+            $this->errors[] = $this->l('Wybrany profil ma nieprawidłowe cechy.');
         }
 
         if ($this->errors) {
             $this->dryRunInput = [
                 'prefix' => $prefix,
-                'feature_ids' => $featureIds,
+                'profile_id' => $profileId,
             ];
-            return [null, null];
+            return [null, null, []];
         }
 
-        return [$prefix, $featureIds];
+        return [$prefix, $profileId, $featureIds];
     }
 
     private function getGroups(array $filters, int $offset, int $limit): array
     {
-        $where = [];
+        $whereSql = '';
         $joins = ' INNER JOIN ' . _DB_PREFIX_ . 'po_link_profile p ON p.id_profile = g.id_profile';
-        if (!empty($filters['prefix'])) {
-            $where[] = 'g.sku_prefix LIKE \'%' . pSQL($filters['prefix']) . '%\'';
-        }
-
-        if (!empty($filters['feature_id'])) {
-            $where[] = 'FIND_IN_SET(' . (int) $filters['feature_id'] . ', p.options_csv)';
-        }
-
-        if (!empty($filters['product_id']) || !empty($filters['sku'])) {
-            $productId = (int) $filters['product_id'];
-            if ($productId <= 0 && !empty($filters['sku'])) {
-                $productId = (int) Db::getInstance()->getValue('SELECT id_product FROM ' . _DB_PREFIX_ . 'product WHERE reference=\'' . pSQL($filters['sku']) . '\'');
-            }
-            if ($productId > 0) {
-                $assignment = Db::getInstance()->getRow('SELECT id_profile, family_key FROM ' . _DB_PREFIX_ . 'po_link_product_family WHERE id_product=' . (int) $productId);
-                if ($assignment) {
-                    $where[] = 'g.id_profile=' . (int) $assignment['id_profile'] . ' AND g.sku_prefix=\'' . pSQL((string) $assignment['family_key']) . '\'';
-                } else {
-                    $where[] = '1=0';
-                }
-            } else {
-                $where[] = '1=0';
-            }
-        }
-
-        if (!empty($filters['feature_value_id']) && !empty($filters['feature_id'])) {
-            $joins .= ' INNER JOIN ' . _DB_PREFIX_ . 'po_link_product_family pf_filter ON pf_filter.id_profile = g.id_profile AND pf_filter.family_key = g.sku_prefix';
-            $joins .= ' INNER JOIN ' . _DB_PREFIX_ . 'feature_product fp ON fp.id_product = pf_filter.id_product';
-            $where[] = 'fp.id_feature=' . (int) $filters['feature_id'] . ' AND fp.id_feature_value=' . (int) $filters['feature_value_id'];
-        }
-
-        $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
         $total = (int) Db::getInstance()->getValue('SELECT COUNT(DISTINCT g.id_group)
             FROM ' . _DB_PREFIX_ . 'po_link_group g' . $joins . $whereSql);
@@ -411,13 +373,7 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
 
     private function getListFilters(): array
     {
-        return [
-            'prefix' => trim((string) Tools::getValue('filter_prefix')),
-            'feature_id' => (int) Tools::getValue('filter_feature_id'),
-            'feature_value_id' => (int) Tools::getValue('filter_feature_value_id'),
-            'sku' => trim((string) Tools::getValue('filter_sku')),
-            'product_id' => (int) Tools::getValue('filter_product_id'),
-        ];
+        return [];
     }
 
     private function getFeatureOptions(): array
@@ -432,6 +388,11 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
         }
 
         return $options;
+    }
+
+    private function getProfileOptions(): array
+    {
+        return Db::getInstance()->executeS('SELECT id_profile, name FROM ' . _DB_PREFIX_ . 'po_link_profile ORDER BY name ASC') ?: [];
     }
 
     private function getGroupService(): LinkedProductGroupService
