@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Piano\LinkedProduct\Hook;
+namespace PoLinkedProductFeatures\Hook;
 
 use Db;
 use Tools;
