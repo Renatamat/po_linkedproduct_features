@@ -36,6 +36,18 @@ $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'po_link_index` (
     KEY `idx_profile_family` (`id_profile`, `family_key`)
 ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4;';
 
+$sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'po_link_group` (
+    `id_group` INT(11) NOT NULL AUTO_INCREMENT,
+    `id_profile` INT(11) NOT NULL,
+    `sku_prefix` VARCHAR(64) NOT NULL,
+    `feature_values_json` TEXT NULL,
+    `created_at` DATETIME NULL,
+    `updated_at` DATETIME NULL,
+    PRIMARY KEY (`id_group`),
+    UNIQUE KEY `uniq_profile_prefix` (`id_profile`, `sku_prefix`),
+    KEY `idx_prefix` (`sku_prefix`)
+) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4;';
+
 foreach ($sql as $query) {
     if (Db::getInstance()->execute($query) == false) {
         return false;
