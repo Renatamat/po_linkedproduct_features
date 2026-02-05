@@ -62,11 +62,12 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
         }
 
         $indexRows = $db->executeS(
-            'SELECT i.id_product, i.options_json, p.active
+            'SELECT i.id_product, i.options_json
              FROM ' . _DB_PREFIX_ . 'po_link_index i
              INNER JOIN ' . _DB_PREFIX_ . 'product p ON p.id_product = i.id_product
              WHERE i.id_profile=' . (int) $profile['id_profile'] . '
-               AND i.family_key=\'' . pSQL((string) $assignment['family_key']) . '\''
+               AND i.family_key=\'' . pSQL((string) $assignment['family_key']) . '\'
+               AND p.active=1'
         ) ?: [];
 
         if (!$indexRows) {
@@ -75,7 +76,6 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
 
         $productOptions = [];
         $featureValues = [];
-        $productActive = [];
         foreach ($indexRows as $row) {
             $decoded = json_decode((string) $row['options_json'], true);
             if (!is_array($decoded)) {
@@ -93,7 +93,6 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
             }
             $productIdRow = (int) $row['id_product'];
             $productOptions[$productIdRow] = $options;
-            $productActive[$productIdRow] = (bool) $row['active'];
         }
 
         if (!isset($productOptions[$productId])) {
@@ -155,31 +154,44 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
                 $expected[$featureId] = $valueId;
 
                 $targetProductId = null;
-                $targetActive = false;
                 foreach ($productOptions as $candidateId => $candidateOptions) {
                     $match = true;
-                    foreach ($optionIds as $checkFeatureId) {
-                        if (!isset($expected[$checkFeatureId])) {
-                            continue;
-                        }
-                        if (!isset($candidateOptions[$checkFeatureId]) || $candidateOptions[$checkFeatureId] !== $expected[$checkFeatureId]) {
+                    foreach ($expected as $checkFeatureId => $checkValueId) {
+                        if (!isset($candidateOptions[$checkFeatureId]) || $candidateOptions[$checkFeatureId] !== $checkValueId) {
                             $match = false;
                             break;
                         }
                     }
                     if ($match) {
-                        $candidateActive = $productActive[$candidateId] ?? false;
+                        $targetProductId = $candidateId;
                         if ($candidateId === $productId) {
-                            $targetProductId = $candidateId;
-                            $targetActive = true;
                             break;
                         }
-                        if ($candidateActive && !$targetActive) {
+                    }
+                }
+
+                if ($targetProductId === null) {
+                    $bestScore = -1;
+                    $maxScore = max(0, count($currentOptions) - 1);
+                    foreach ($productOptions as $candidateId => $candidateOptions) {
+                        if (!isset($candidateOptions[$featureId]) || $candidateOptions[$featureId] !== $valueId) {
+                            continue;
+                        }
+                        $score = 0;
+                        foreach ($currentOptions as $currentFeatureId => $currentValueId) {
+                            if ($currentFeatureId === $featureId) {
+                                continue;
+                            }
+                            if (isset($candidateOptions[$currentFeatureId]) && $candidateOptions[$currentFeatureId] === $currentValueId) {
+                                $score++;
+                            }
+                        }
+                        if ($score > $bestScore) {
+                            $bestScore = $score;
                             $targetProductId = $candidateId;
-                            $targetActive = true;
-                        } elseif ($targetProductId === null) {
-                            $targetProductId = $candidateId;
-                            $targetActive = $candidateActive;
+                            if ($score >= $maxScore) {
+                                break;
+                            }
                         }
                     }
                 }
@@ -189,7 +201,7 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
                     'label' => $valueNameMap[$featureId][$valueId] ?? (string) $valueId,
                     'product_id' => $targetProductId,
                     'active' => $targetProductId === $productId,
-                    'disabled' => $targetProductId === null || !$targetActive,
+                    'disabled' => $targetProductId === null,
                     'link' => $targetProductId ? $this->context->link->getProductLink($targetProductId) : null,
                 ];
             }

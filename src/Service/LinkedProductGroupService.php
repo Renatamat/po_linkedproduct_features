@@ -146,6 +146,9 @@ class LinkedProductGroupService
             return ['rows' => [], 'total' => 0];
         }
 
+        $profile = $this->db->getRow('SELECT options_csv FROM ' . _DB_PREFIX_ . 'po_link_profile WHERE id_profile=' . (int) $group['id_profile']);
+        $featureIds = $this->parseCsvIds((string) ($profile['options_csv'] ?? ''));
+
         $where = ' WHERE pf.id_profile=' . (int) $group['id_profile'] . ' AND pf.family_key=\'' . pSQL((string) $group['sku_prefix']) . '\'';
         if (!empty($filters['product_id'])) {
             $where .= ' AND p.id_product=' . (int) $filters['product_id'];
@@ -165,6 +168,16 @@ class LinkedProductGroupService
             $where .
             ' ORDER BY p.id_product DESC
               LIMIT ' . (int) $offset . ', ' . (int) $limit) ?: [];
+
+        if ($rows) {
+            $productIds = array_values(array_unique(array_map('intval', array_column($rows, 'id_product'))));
+            $featureValues = $this->getFeatureValuesForProducts($productIds, $featureIds);
+            foreach ($rows as &$row) {
+                $productId = (int) $row['id_product'];
+                $row['feature_values'] = $featureValues[$productId] ?? [];
+            }
+            unset($row);
+        }
 
         return ['rows' => $rows, 'total' => $total];
     }
@@ -244,8 +257,53 @@ class LinkedProductGroupService
             $index++;
         }
 
-        $sql .= ' WHERE p.reference LIKE "' . $likePrefix . '%"';
+        $sql .= ' WHERE p.reference LIKE "' . $likePrefix . '%" AND p.active=1';
 
         return $sql;
+    }
+
+    private function getFeatureValuesForProducts(array $productIds, array $featureIds): array
+    {
+        if (!$productIds || !$featureIds) {
+            return [];
+        }
+
+        $rows = $this->db->executeS('
+            SELECT fp.id_product, fp.id_feature, fl.name AS feature_name, fvl.value
+            FROM ' . _DB_PREFIX_ . 'feature_product fp
+            INNER JOIN ' . _DB_PREFIX_ . 'feature_lang fl
+                ON fl.id_feature = fp.id_feature
+                AND fl.id_lang=' . (int) $this->context->language->id . '
+            INNER JOIN ' . _DB_PREFIX_ . 'feature_value_lang fvl
+                ON fvl.id_feature_value = fp.id_feature_value
+                AND fvl.id_lang=' . (int) $this->context->language->id . '
+            WHERE fp.id_product IN (' . implode(',', array_map('intval', $productIds)) . ')
+              AND fp.id_feature IN (' . implode(',', array_map('intval', $featureIds)) . ')
+        ') ?: [];
+
+        $featureOrder = array_flip($featureIds);
+        $byProduct = [];
+        foreach ($rows as $row) {
+            $productId = (int) $row['id_product'];
+            $featureId = (int) $row['id_feature'];
+            $byProduct[$productId][$featureId] = [
+                'feature_name' => (string) $row['feature_name'],
+                'value' => (string) $row['value'],
+                'order' => $featureOrder[$featureId] ?? PHP_INT_MAX,
+            ];
+        }
+
+        foreach ($byProduct as $productId => $features) {
+            uasort($features, static function ($a, $b) {
+                return $a['order'] <=> $b['order'];
+            });
+            foreach ($features as &$feature) {
+                unset($feature['order']);
+            }
+            unset($feature);
+            $byProduct[$productId] = array_values($features);
+        }
+
+        return $byProduct;
     }
 }
