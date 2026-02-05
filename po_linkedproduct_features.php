@@ -271,11 +271,25 @@ class Po_linkedproduct_features extends Module
             $output .= '<tr><td colspan="6">' . $this->l('Brak profili.') . '</td></tr>';
         } else {
             foreach ($profiles as $p) {
+                $optionsIds = $this->parseCsvIds((string) ($p['options_csv'] ?? ''));
+                $optionsLabels = [];
+                foreach ($optionsIds as $featureId) {
+                    $optionsLabels[] = $featureOptions[$featureId] ?? ('#' . $featureId);
+                }
+                $optionsLabel = $optionsLabels ? implode(', ', $optionsLabels) : '-';
+
+                $familyIds = $this->parseCsvIds((string) ($p['family_csv'] ?? ''));
+                $familyLabels = [];
+                foreach ($familyIds as $featureId) {
+                    $familyLabels[] = $featureOptions[$featureId] ?? ('#' . $featureId);
+                }
+                $familyLabel = $familyLabels ? implode(', ', $familyLabels) : '-';
+
                 $output .= '<tr>
                     <td>#' . (int) $p['id_profile'] . '</td>
                     <td>' . htmlspecialchars((string) $p['name']) . '</td>
-                    <td>' . htmlspecialchars((string) $p['options_csv']) . '</td>
-                    <td>' . htmlspecialchars((string) ($p['family_csv'] ?? '')) . '</td>
+                    <td>' . htmlspecialchars($optionsLabel) . '</td>
+                    <td>' . htmlspecialchars($familyLabel) . '</td>
                     <td>' . ((int) $p['active'] === 1 ? '✅' : '❌') . '</td>
                     <td>
                         <a class="btn btn-default btn-xs" href="' . $this->context->link->getAdminLink('AdminModules', true)
