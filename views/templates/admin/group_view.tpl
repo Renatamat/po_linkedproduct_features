@@ -50,13 +50,14 @@
           <th>{l s='Nazwa' mod='po_linkedproduct_features'}</th>
           <th>{l s='SKU' mod='po_linkedproduct_features'}</th>
           <th>{l s='Aktywny' mod='po_linkedproduct_features'}</th>
+          <th>{l s='Wartości cech' mod='po_linkedproduct_features'}</th>
           <th>{l s='Akcje' mod='po_linkedproduct_features'}</th>
         </tr>
       </thead>
       <tbody>
         {if $products|@count == 0}
           <tr>
-            <td colspan="5">{l s='Brak produktów w grupie.' mod='po_linkedproduct_features'}</td>
+            <td colspan="6">{l s='Brak produktów w grupie.' mod='po_linkedproduct_features'}</td>
           </tr>
         {else}
           {foreach from=$products item=product}
@@ -65,6 +66,17 @@
               <td>{$product.name|escape:'html':'UTF-8'}</td>
               <td>{$product.reference|escape:'html':'UTF-8'}</td>
               <td>{if $product.active}{l s='Tak' mod='po_linkedproduct_features'}{else}{l s='Nie' mod='po_linkedproduct_features'}{/if}</td>
+              <td>
+                {if $product.feature_values|@count > 0}
+                  <ul class="list-unstyled">
+                    {foreach from=$product.feature_values item=feature}
+                      <li><strong>{$feature.feature_name|escape:'html':'UTF-8'}</strong>: {$feature.value|escape:'html':'UTF-8'}</li>
+                    {/foreach}
+                  </ul>
+                {else}
+                  -
+                {/if}
+              </td>
               <td>
                 <form method="post" style="display:inline-block">
                   <input type="hidden" name="token" value="{$token|escape:'html':'UTF-8'}">
