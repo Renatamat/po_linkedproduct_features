@@ -29,9 +29,5 @@ function upgrade_module_1_1_0($module)
         SELECT DISTINCT id_profile, family_key, NOW(), NOW()
         FROM ' . _DB_PREFIX_ . 'po_link_product_family');
 
-    if (method_exists($module, 'installTab')) {
-        $module->installTab();
-    }
-
     return true;
 }

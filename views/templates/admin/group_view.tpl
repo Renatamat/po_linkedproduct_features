@@ -6,6 +6,8 @@
   <p><strong>{l s='Aktualizacja' mod='po_linkedproduct_features'}:</strong> {$group.updated_at|escape:'html':'UTF-8'}</p>
   <form method="post" style="display:inline-block">
     <input type="hidden" name="token" value="{$token|escape:'html':'UTF-8'}">
+    <input type="hidden" name="configure" value="po_linkedproduct_features">
+    <input type="hidden" name="lp_section" value="groups">
     <input type="hidden" name="lp_action" value="rebuild_group">
     <input type="hidden" name="id_group" value="{$group.id_group|intval}">
     <button type="submit" class="btn btn-default" onclick="return confirm('{l s='Przebudować grupę?' mod='po_linkedproduct_features'}');">
@@ -20,7 +22,8 @@
 <div class="panel">
   <h3><i class="icon-list"></i> {l s='Produkty w grupie' mod='po_linkedproduct_features'}</h3>
   <form method="get" class="form-inline">
-    <input type="hidden" name="controller" value="AdminPoLinkedProductGroups">
+    <input type="hidden" name="configure" value="po_linkedproduct_features">
+    <input type="hidden" name="lp_section" value="groups">
     <input type="hidden" name="token" value="{$token|escape:'html':'UTF-8'}">
     <input type="hidden" name="view" value="1">
     <input type="hidden" name="id_group" value="{$group.id_group|intval}">
@@ -65,6 +68,8 @@
               <td>
                 <form method="post" style="display:inline-block">
                   <input type="hidden" name="token" value="{$token|escape:'html':'UTF-8'}">
+                  <input type="hidden" name="configure" value="po_linkedproduct_features">
+                  <input type="hidden" name="lp_section" value="groups">
                   <input type="hidden" name="lp_action" value="remove_product">
                   <input type="hidden" name="id_group" value="{$group.id_group|intval}">
                   <input type="hidden" name="id_product" value="{$product.id_product|intval}">

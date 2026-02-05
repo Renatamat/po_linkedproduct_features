@@ -7,7 +7,7 @@ Moduł łączy produkty w grupy na podstawie:
 
 ## Nowy panel Back Office: „Powiązania produktów”
 
-Po instalacji/aktualizacji modułu pojawia się nowa pozycja w menu modułów: **Powiązania produktów**. Z poziomu strony możesz:
+Po instalacji/aktualizacji modułu w konfiguracji modułu pojawia się dodatkowa zakładka **Powiązania produktów**. Z poziomu strony możesz:
 
 - tworzyć reguły/grupy dla prefiksu SKU i 1–3 cech,
 - podejrzeć dopasowanie przed zapisaniem (dry-run),
@@ -46,7 +46,7 @@ Podczas aktualizacji do wersji `1.1.0`:
 
 - tworzona jest tabela `po_link_group`,
 - istniejące grupy są odtwarzane na podstawie wpisów w `po_link_product_family`,
-- dodawany jest nowy tab w Back Office.
+- odtwarzane są istniejące grupy dla nowej zakładki w konfiguracji modułu.
 
 ## Skrypt developerski (dry-run)
 

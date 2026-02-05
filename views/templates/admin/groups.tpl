@@ -1,7 +1,8 @@
 <div class="panel">
   <h3><i class="icon-link"></i> {l s='Powiązania produktów' mod='po_linkedproduct_features'}</h3>
   <form method="get" class="form-inline">
-    <input type="hidden" name="controller" value="AdminPoLinkedProductGroups">
+    <input type="hidden" name="configure" value="po_linkedproduct_features">
+    <input type="hidden" name="lp_section" value="groups">
     <input type="hidden" name="token" value="{$token|escape:'html':'UTF-8'}">
     <div class="form-group">
       <label class="control-label">{l s='Prefiks SKU' mod='po_linkedproduct_features'}</label>
@@ -37,9 +38,11 @@
   </form>
 </div>
 
-<form method="post">
-  <input type="hidden" name="token" value="{$token|escape:'html':'UTF-8'}">
-  <input type="hidden" name="lp_action" value="bulk_delete">
+  <form method="post">
+    <input type="hidden" name="token" value="{$token|escape:'html':'UTF-8'}">
+    <input type="hidden" name="configure" value="po_linkedproduct_features">
+    <input type="hidden" name="lp_section" value="groups">
+    <input type="hidden" name="lp_action" value="bulk_delete">
   <div class="panel">
     <h3><i class="icon-list"></i> {l s='Lista grup' mod='po_linkedproduct_features'}</h3>
     <div class="table-responsive">
@@ -116,6 +119,8 @@
   <h3><i class="icon-plus"></i> {l s='Dodaj regułę/grupę' mod='po_linkedproduct_features'}</h3>
   <form method="post" class="defaultForm form-horizontal">
     <input type="hidden" name="token" value="{$token|escape:'html':'UTF-8'}">
+    <input type="hidden" name="configure" value="po_linkedproduct_features">
+    <input type="hidden" name="lp_section" value="groups">
     <div class="form-group">
       <label class="control-label col-lg-3">{l s='Prefiks SKU' mod='po_linkedproduct_features'}</label>
       <div class="col-lg-9">
