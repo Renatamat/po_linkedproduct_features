@@ -96,7 +96,6 @@
     </div>
     {if $total > $page_size}
       <div class="panel-footer">
-        {assign var=page_count value=($total / $page_size)|ceil}
         <ul class="pagination">
           {if $page > 1}
             <li><a href="{$current_url|escape:'html':'UTF-8'}&page={$page-1}{$filter_query|escape:'html':'UTF-8'}">&laquo;</a></li>
