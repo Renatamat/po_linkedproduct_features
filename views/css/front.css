@@ -1,0 +1,40 @@
+.product-linked .type-container {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.product-linked .type-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.product-linked .type-list li {
+  margin: 0;
+}
+
+.product-linked .type-list-text {
+  display: inline-block;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #d0d0d0;
+  border-radius: 999px;
+  color: #363a41;
+  text-decoration: none;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.product-linked .type-list-text.active {
+  border-color: #25b9d7;
+  color: #25b9d7;
+}
+
+.product-linked .type-list-text:hover {
+  border-color: #25b9d7;
+  color: #25b9d7;
+}
+
+.product-linked .type-select-container {
+  max-width: 320px;
+}

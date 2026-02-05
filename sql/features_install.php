@@ -1,6 +1,7 @@
 <?php
 
 $sql = array();
+$result = true;
 
 $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'po_link_profile` (
     `id_profile` INT(11) NOT NULL AUTO_INCREMENT,
@@ -38,6 +39,9 @@ $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'po_link_index` (
 
 foreach ($sql as $query) {
     if (Db::getInstance()->execute($query) == false) {
-        return false;
+        $result = false;
+        break;
     }
 }
+
+return $result;
