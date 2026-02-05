@@ -253,16 +253,20 @@ class LinkedProductGroupService
     {
         $likePrefix = pSQL(addcslashes($prefix, '%_'));
         $sql = ' FROM ' . _DB_PREFIX_ . 'product p';
-        $index = 1;
-        foreach ($featureIds as $featureId) {
-            $alias = 'fp' . $index;
-            $sql .= ' INNER JOIN ' . _DB_PREFIX_ . 'feature_product ' . $alias . '
-                ON ' . $alias . '.id_product = p.id_product
-                AND ' . $alias . '.id_feature = ' . (int) $featureId;
-            if (isset($featureValueFilters[$featureId])) {
-                $sql .= ' AND ' . $alias . '.id_feature_value = ' . (int) $featureValueFilters[$featureId];
+        $sql .= ' INNER JOIN ' . _DB_PREFIX_ . 'feature_product fp ON fp.id_product = p.id_product';
+        $featureIdsSql = implode(',', array_map('intval', $featureIds));
+        if ($featureValueFilters) {
+            $valueConditions = [];
+            foreach ($featureValueFilters as $featureId => $valueId) {
+                $valueConditions[] = '(fp.id_feature = ' . (int) $featureId . ' AND fp.id_feature_value = ' . (int) $valueId . ')';
             }
-            $index++;
+            $sql .= ' AND fp.id_feature IN (' . $featureIdsSql . ') AND (' . implode(' OR ', $valueConditions) . ')';
+        } else {
+            $sql .= ' AND fp.id_feature IN (' . $featureIdsSql . ')';
+        }
+
+        if ($includeLang) {
+            $sql .= ' INNER JOIN ' . _DB_PREFIX_ . 'product_lang pl ON pl.id_product = p.id_product AND pl.id_lang=' . (int) $this->context->language->id;
         }
 
         if ($includeLang) {
