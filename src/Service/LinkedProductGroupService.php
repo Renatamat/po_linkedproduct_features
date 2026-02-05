@@ -28,12 +28,11 @@ class LinkedProductGroupService
             return ['count' => 0, 'rows' => []];
         }
 
-        $baseSql = $this->buildProductMatchSql($prefix, $featureIds, $featureValueFilters);
+        $baseSql = $this->buildProductMatchSql($prefix, $featureIds, $featureValueFilters, true);
         $count = (int) $this->db->getValue('SELECT COUNT(DISTINCT p.id_product) ' . $baseSql);
 
         $rows = $this->db->executeS(
             'SELECT p.id_product, p.reference, p.active, pl.name ' . $baseSql .
-            ' INNER JOIN ' . _DB_PREFIX_ . 'product_lang pl ON pl.id_product = p.id_product AND pl.id_lang=' . (int) $this->context->language->id .
             ' ORDER BY p.id_product DESC
               LIMIT ' . (int) $limit
         ) ?: [];
@@ -150,16 +149,25 @@ class LinkedProductGroupService
         $featureIds = $this->parseCsvIds((string) ($profile['options_csv'] ?? ''));
 
         $where = ' WHERE pf.id_profile=' . (int) $group['id_profile'] . ' AND pf.family_key=\'' . pSQL((string) $group['sku_prefix']) . '\'';
+        $searchConditions = [];
         if (!empty($filters['product_id'])) {
-            $where .= ' AND p.id_product=' . (int) $filters['product_id'];
+            $searchConditions[] = 'p.id_product=' . (int) $filters['product_id'];
         }
         if (!empty($filters['sku'])) {
-            $where .= ' AND p.reference LIKE \'%' . pSQL((string) $filters['sku']) . '%\'';
+            $term = (string) $filters['sku'];
+            $likePrefix = pSQL(addcslashes($term, '%_'));
+            $searchConditions[] = 'p.reference LIKE \'' . $likePrefix . '%\'';
+            $searchConditions[] = 'pl.name LIKE \'%' . pSQL($term) . '%\'';
+        }
+        if ($searchConditions) {
+            $where .= ' AND (' . implode(' OR ', $searchConditions) . ')';
         }
 
         $total = (int) $this->db->getValue('SELECT COUNT(*)
             FROM ' . _DB_PREFIX_ . 'po_link_product_family pf
-            INNER JOIN ' . _DB_PREFIX_ . 'product p ON p.id_product = pf.id_product' . $where);
+            INNER JOIN ' . _DB_PREFIX_ . 'product p ON p.id_product = pf.id_product
+            INNER JOIN ' . _DB_PREFIX_ . 'product_lang pl ON pl.id_product = p.id_product AND pl.id_lang=' . (int) $this->context->language->id .
+            $where);
 
         $rows = $this->db->executeS('SELECT p.id_product, p.reference, p.active, pl.name
             FROM ' . _DB_PREFIX_ . 'po_link_product_family pf
@@ -241,20 +249,24 @@ class LinkedProductGroupService
         return $filters;
     }
 
-    private function buildProductMatchSql(string $prefix, array $featureIds, array $featureValueFilters = []): string
+    private function buildProductMatchSql(string $prefix, array $featureIds, array $featureValueFilters = [], bool $includeLang = false): string
     {
         $likePrefix = pSQL(addcslashes($prefix, '%_'));
         $sql = ' FROM ' . _DB_PREFIX_ . 'product p';
-        $index = 1;
-        foreach ($featureIds as $featureId) {
-            $alias = 'fp' . $index;
-            $sql .= ' INNER JOIN ' . _DB_PREFIX_ . 'feature_product ' . $alias . '
-                ON ' . $alias . '.id_product = p.id_product
-                AND ' . $alias . '.id_feature = ' . (int) $featureId;
-            if (isset($featureValueFilters[$featureId])) {
-                $sql .= ' AND ' . $alias . '.id_feature_value = ' . (int) $featureValueFilters[$featureId];
+        $sql .= ' INNER JOIN ' . _DB_PREFIX_ . 'feature_product fp ON fp.id_product = p.id_product';
+        $featureIdsSql = implode(',', array_map('intval', $featureIds));
+        if ($featureValueFilters) {
+            $valueConditions = [];
+            foreach ($featureValueFilters as $featureId => $valueId) {
+                $valueConditions[] = '(fp.id_feature = ' . (int) $featureId . ' AND fp.id_feature_value = ' . (int) $valueId . ')';
             }
-            $index++;
+            $sql .= ' AND fp.id_feature IN (' . $featureIdsSql . ') AND (' . implode(' OR ', $valueConditions) . ')';
+        } else {
+            $sql .= ' AND fp.id_feature IN (' . $featureIdsSql . ')';
+        }
+
+        if ($includeLang) {
+            $sql .= ' INNER JOIN ' . _DB_PREFIX_ . 'product_lang pl ON pl.id_product = p.id_product AND pl.id_lang=' . (int) $this->context->language->id;
         }
 
         $sql .= ' WHERE p.reference LIKE "' . $likePrefix . '%" AND p.active=1';
