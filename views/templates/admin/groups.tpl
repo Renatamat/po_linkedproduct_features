@@ -121,26 +121,21 @@
     <input type="hidden" name="configure" value="po_linkedproduct_features">
     <input type="hidden" name="lp_section" value="groups">
     <div class="form-group">
-      <label class="control-label col-lg-3">{l s='Prefiks SKU' mod='po_linkedproduct_features'}</label>
+      <label class="control-label col-lg-3">{l s='Profil linkowania' mod='po_linkedproduct_features'}</label>
       <div class="col-lg-9">
-        <input type="text" name="sku_prefix" class="form-control" value="{$dry_run_input.prefix|default:''|escape:'html':'UTF-8'}" required>
-        <p class="help-block">{l s='Dozwolone znaki: A-Z, 0-9, -, _' mod='po_linkedproduct_features'}</p>
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="control-label col-lg-3">{l s='Cechy (1-3)' mod='po_linkedproduct_features'}</label>
-      <div class="col-lg-9">
-        <select name="feature_ids[]" class="form-control" multiple required>
-          {foreach from=$features key=featureId item=featureName}
-            <option value="{$featureId|intval}" {if isset($dry_run_input.feature_ids) && in_array($featureId, $dry_run_input.feature_ids)}selected{/if}>{$featureName|escape:'html':'UTF-8'}</option>
+        <select name="profile_id" class="form-control" required>
+          <option value="">{l s='Wybierz profil' mod='po_linkedproduct_features'}</option>
+          {foreach from=$profiles item=profile}
+            <option value="{$profile.id_profile|intval}" {if $dry_run_input.profile_id|default:0 == $profile.id_profile}selected{/if}>{$profile.name|escape:'html':'UTF-8'}</option>
           {/foreach}
         </select>
       </div>
     </div>
     <div class="form-group">
-      <label class="control-label col-lg-3">{l s='Nazwa profilu (opcjonalnie)' mod='po_linkedproduct_features'}</label>
+      <label class="control-label col-lg-3">{l s='Prefiks SKU' mod='po_linkedproduct_features'}</label>
       <div class="col-lg-9">
-        <input type="text" name="profile_name" class="form-control" value="">
+        <input type="text" name="sku_prefix" class="form-control" value="{$dry_run_input.prefix|default:''|escape:'html':'UTF-8'}" required>
+        <p class="help-block">{l s='Dozwolone znaki: A-Z, 0-9, -, _' mod='po_linkedproduct_features'}</p>
       </div>
     </div>
     <div class="panel-footer">
