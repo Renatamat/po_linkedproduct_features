@@ -238,8 +238,12 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
                 ];
             }
 
-            usort($valueEntries, function ($a, $b) {
-                return strcmp((string) $a['label'], (string) $b['label']);
+            usort($valueEntries, function ($a, $b) use ($featureId) {
+                $comparison = strcmp((string) $a['label'], (string) $b['label']);
+                if ($featureId === 4) {
+                    return -$comparison;
+                }
+                return $comparison;
             });
 
             $featurePositions[] = [
