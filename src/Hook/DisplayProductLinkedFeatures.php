@@ -229,9 +229,9 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
                     'label' => $valueId === 0 ? $missingLabel : ($valueNameMap[$featureId][$valueId] ?? (string) $valueId),
                     'product_id' => $targetProductId,
                     'active' => $targetProductId === $productId,
-                    'disabled' => $targetProductId === null,
+                    'disabled' => $valueId === 0 || $targetProductId === null,
                     'muted' => $targetProductId !== null && !$isExact,
-                    'link' => $targetProductId ? $this->context->link->getProductLink($targetProductId) : null,
+                    'link' => ($valueId !== 0 && $targetProductId) ? $this->context->link->getProductLink($targetProductId) : null,
                 ];
             }
 
