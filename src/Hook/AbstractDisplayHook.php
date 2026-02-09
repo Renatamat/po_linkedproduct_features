@@ -23,7 +23,9 @@ abstract class AbstractDisplayHook
             return '';
         }
 
-        $this->assignTemplateVariables($params);
+        if (!$this->assignTemplateVariables($params)) {
+            return '';
+        }
 
         return $this->module->fetch(
             'module:' . $this->module->name . '/views/templates/hook/' . $this->getTemplate()
@@ -32,7 +34,7 @@ abstract class AbstractDisplayHook
 
     abstract protected function getTemplate(): string;
 
-    abstract protected function assignTemplateVariables(array $params);
+    abstract protected function assignTemplateVariables(array $params): bool;
 
     protected function shouldBlockBeDisplayed(array $params)
     {
