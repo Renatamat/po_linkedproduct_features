@@ -15,22 +15,19 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
         return self::TEMPLATE_FILE;
     }
 
-    protected function assignTemplateVariables(array $params)
+    protected function assignTemplateVariables(array $params): bool
     {
         $productId = (int) Tools::getValue('id_product');
 
         if (!$productId) {
-            return;
+            return false;
         }
 
         if (!$this->assignFeatureLinkedPositions($productId)) {
-            $this->context->smarty->assign([
-                'feature_positions' => [],
-                'positions' => [],
-                'id_lang' => (int) $this->context->language->id,
-            ]);
-            return;
+            return false;
         }
+
+        return true;
     }
 
     private function assignFeatureLinkedPositions(int $productId): bool
