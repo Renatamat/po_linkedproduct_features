@@ -8,6 +8,7 @@ $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'po_link_profile` (
     `options_csv` VARCHAR(64) NOT NULL,
     `family_csv` VARCHAR(255) NULL,
     `active` TINYINT(1) NOT NULL DEFAULT 1,
+    `show_muted` TINYINT(1) NOT NULL DEFAULT 1,
     PRIMARY KEY (`id_profile`)
 ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4;';
 

@@ -22,7 +22,7 @@ class Po_linkedproduct_features extends Module
     {
         $this->name = 'po_linkedproduct_features';
         $this->tab = 'administration';
-        $this->version = '1.1.0';
+        $this->version = '1.1.1';
         $this->author = 'Przemysław Markiewicz';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -260,13 +260,14 @@ class Po_linkedproduct_features extends Module
                             <th>' . $this->l('Nazwa') . '</th>
                             <th>' . $this->l('Options CSV') . '</th>
                             <th>' . $this->l('Aktywny') . '</th>
+                            <th>' . $this->l('Pokazuj niepełne dopasowania (is-muted)') . '</th>
                             <th>' . $this->l('Akcje') . '</th>
                         </tr>
                     </thead>
                     <tbody>';
 
         if (!$profiles) {
-            $output .= '<tr><td colspan="5">' . $this->l('Brak profili.') . '</td></tr>';
+            $output .= '<tr><td colspan="6">' . $this->l('Brak profili.') . '</td></tr>';
         } else {
             foreach ($profiles as $p) {
                 $optionsIds = $this->parseCsvIds((string) ($p['options_csv'] ?? ''));
@@ -281,6 +282,7 @@ class Po_linkedproduct_features extends Module
                     <td>' . htmlspecialchars((string) $p['name']) . '</td>
                     <td>' . htmlspecialchars($optionsLabel) . '</td>
                     <td>' . ((int) $p['active'] === 1 ? '✅' : '❌') . '</td>
+                    <td>' . ((int) ($p['show_muted'] ?? 1) === 1 ? '✅' : '❌') . '</td>
                     <td>
                         <a class="btn btn-default btn-xs" href="' . $this->context->link->getAdminLink('AdminModules', true)
                             . '&configure=' . $this->name . '&profile_id=' . (int) $p['id_profile'] . '">' . $this->l('Edytuj') . '</a>
@@ -325,6 +327,13 @@ class Po_linkedproduct_features extends Module
                     <label class="control-label col-lg-3">' . $this->l('Aktywny') . '</label>
                     <div class="col-lg-9">
                         <input type="checkbox" name="profile_active" value="1"' . ((int) ($profile['active'] ?? 1) === 1 ? ' checked' : '') . '>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="control-label col-lg-3">' . $this->l('Pokazuj niepełne dopasowania (is-muted)') . '</label>
+                    <div class="col-lg-9">
+                        <input type="checkbox" name="profile_show_muted" value="1"' . ((int) ($profile['show_muted'] ?? 1) === 1 ? ' checked' : '') . '>
+                        <p class="help-block">' . $this->l('Po odznaczeniu moduł nie będzie łączył ani wyświetlał pozycji oznaczonych jako is-muted.') . '</p>
                     </div>
                 </div>
                 <div class="form-group">
@@ -719,6 +728,7 @@ class Po_linkedproduct_features extends Module
         $name = trim((string) Tools::getValue('profile_name'));
         $options = Tools::getValue('profile_options', []);
         $active = Tools::getValue('profile_active') ? 1 : 0;
+        $showMuted = Tools::getValue('profile_show_muted') ? 1 : 0;
 
         if ($name === '') {
             throw new \RuntimeException($this->l('Nazwa profilu jest wymagana.'));
@@ -739,6 +749,7 @@ class Po_linkedproduct_features extends Module
             'name' => pSQL($name),
             'options_csv' => pSQL($optionsCsv),
             'active' => (int) $active,
+            'show_muted' => (int) $showMuted,
         ];
 
         $isNew = false;

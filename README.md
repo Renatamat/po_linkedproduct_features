@@ -5,6 +5,8 @@ Moduł łączy produkty w grupy na podstawie:
 - Prefiksu SKU (`product.reference LIKE 'PREFIX%'`).
 - Wybranych cech (`feature_product` / `feature_value`).
 
+W profilach linkowania można też ustawić, czy pokazywać i linkować elementy niepełnie dopasowane (`is-muted`).
+
 ## Nowy panel Back Office: „Powiązania produktów”
 
 Po instalacji/aktualizacji modułu w konfiguracji modułu pojawia się dodatkowa zakładka **Powiązania produktów**. Z poziomu strony możesz:
@@ -47,6 +49,11 @@ Podczas aktualizacji do wersji `1.1.0`:
 - tworzona jest tabela `po_link_group`,
 - istniejące grupy są odtwarzane na podstawie wpisów w `po_link_product_family`,
 - odtwarzane są istniejące grupy dla nowej zakładki w konfiguracji modułu.
+
+Podczas aktualizacji do wersji `1.1.1`:
+
+- dodawana jest kolumna `show_muted` w tabeli `po_link_profile`,
+- dla istniejących profili domyślnie aktywowane jest pokazywanie `is-muted`.
 
 ## Skrypt developerski (dry-run)
 
