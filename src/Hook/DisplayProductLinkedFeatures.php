@@ -44,7 +44,7 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
         }
 
         $profile = $db->getRow('
-            SELECT id_profile, options_csv
+            SELECT id_profile, options_csv, show_muted
             FROM ' . _DB_PREFIX_ . 'po_link_profile
             WHERE id_profile=' . (int) $assignment['id_profile'] . ' AND active=1'
         );
@@ -54,6 +54,7 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
         }
 
         $optionIds = $this->parseCsvIds((string) ($profile['options_csv'] ?? ''));
+        $showMuted = (int) ($profile['show_muted'] ?? 1) === 1;
         if (!$optionIds) {
             return false;
         }
@@ -192,7 +193,7 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
                     }
                 }
 
-                if ($targetProductId === null) {
+                if ($targetProductId === null && $showMuted) {
                     $bestScore = -1;
                     $maxScore = max(0, count($currentOptions) - 1);
                     foreach ($productOptions as $candidateId => $candidateOptions) {
@@ -222,6 +223,10 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
                             }
                         }
                     }
+                }
+
+                if (!$showMuted && !$isExact) {
+                    continue;
                 }
 
                 $valueEntries[] = [
