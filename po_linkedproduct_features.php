@@ -313,25 +313,6 @@ class Po_linkedproduct_features extends Module
 
         $output .= '</tbody></table></div></div>';
 
-        $output .= '<form method="post" class="defaultForm form-horizontal" style="margin-bottom:15px;">
-            <input type="hidden" name="lp_action" value="save_size_feature_ids">
-            <div class="panel">
-                <div class="panel-heading">' . $this->l('Ustawienia sortowania rozmiaru') . '</div>
-                <div class="form-group">
-                    <label class="control-label col-lg-3">' . $this->l('ID cech rozmiaru') . '</label>
-                    <div class="col-lg-9">
-                        <input type="text" name="size_feature_ids" class="form-control" value="' . htmlspecialchars(implode(',', $sizeFeatureIds)) . '">
-                        <p class="help-block">' . $this->l('Podaj ID cech rozmiaru oddzielone przecinkami (np. 4,12,15). Dla tych cech kolejność wartości będzie XS, S, M, L, XL...') . '</p>
-                    </div>
-                </div>
-                <div class="panel-footer">
-                    <button type="submit" class="btn btn-default pull-right">
-                        <i class="process-icon-save"></i> ' . $this->l('Save') . '
-                    </button>
-                </div>
-            </div>
-        </form>';
-
         $output .= '<form method="post" class="defaultForm form-horizontal">
             <input type="hidden" name="lp_action" value="save_profile">
             <input type="hidden" name="profile_id" value="' . (int) $profileId . '">
@@ -395,6 +376,25 @@ class Po_linkedproduct_features extends Module
         }
 
         $output .= '        </div>
+                </div>
+                <div class="panel-footer">
+                    <button type="submit" class="btn btn-default pull-right">
+                        <i class="process-icon-save"></i> ' . $this->l('Save') . '
+                    </button>
+                </div>
+            </div>
+        </form>';
+
+        $output .= '<form method="post" class="defaultForm form-horizontal" style="margin-top:15px;">
+            <input type="hidden" name="lp_action" value="save_size_feature_ids">
+            <div class="panel">
+                <div class="panel-heading">' . $this->l('Ustawienia sortowania rozmiaru') . '</div>
+                <div class="form-group">
+                    <label class="control-label col-lg-3">' . $this->l('ID cech rozmiaru') . '</label>
+                    <div class="col-lg-9">
+                        <input type="text" name="size_feature_ids" class="form-control" value="' . htmlspecialchars(implode(',', $sizeFeatureIds)) . '">
+                        <p class="help-block">' . $this->l('Podaj ID cech rozmiaru oddzielone przecinkami (np. 4,12,15). Dla tych cech kolejność wartości będzie XS, S, M, L, XL...') . '</p>
+                    </div>
                 </div>
                 <div class="panel-footer">
                     <button type="submit" class="btn btn-default pull-right">
