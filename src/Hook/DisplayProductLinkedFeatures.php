@@ -5,6 +5,7 @@ namespace PoLinkedProductFeatures\Hook;
 
 use Db;
 use Tools;
+use Configuration;
 
 class DisplayProductLinkedFeatures extends AbstractDisplayHook
 {
@@ -143,6 +144,7 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
 
         $currentOptions = $productOptions[$productId] ?? [];
         $featurePositions = [];
+        $sizeFeatureIds = $this->getConfiguredSizeFeatureIds();
 
         $missingLabel = $this->module->l('Brak', 'displayproductlinkedfeatures');
 
@@ -240,12 +242,12 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
                 ];
             }
 
-            usort($valueEntries, function ($a, $b) use ($featureId) {
-                $comparison = strcmp((string) $a['label'], (string) $b['label']);
-                if ($featureId === 4) {
-                    return -$comparison;
+            usort($valueEntries, function ($a, $b) use ($featureId, $sizeFeatureIds) {
+                if (in_array($featureId, $sizeFeatureIds, true)) {
+                    return $this->compareSizeLabels((string) $a['label'], (string) $b['label']);
                 }
-                return $comparison;
+
+                return strcmp((string) $a['label'], (string) $b['label']);
             });
 
             $featurePositions[] = [
@@ -280,6 +282,53 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
         })));
 
         return $ids;
+    }
+
+    private function getConfiguredSizeFeatureIds(): array
+    {
+        $csv = (string) Configuration::get('PO_LINKEDPRODUCT_SIZE_FEATURE_IDS', '4');
+        if ($csv === '') {
+            return [];
+        }
+
+        $ids = array_map('intval', array_filter(array_map('trim', explode(',', $csv))));
+
+        return array_values(array_unique(array_filter($ids, static function ($id) {
+            return $id > 0;
+        })));
+    }
+
+    private function compareSizeLabels(string $leftLabel, string $rightLabel): int
+    {
+        $orderMap = [
+            'xxs' => 0,
+            'xs' => 1,
+            's' => 2,
+            'm' => 3,
+            'l' => 4,
+            'xl' => 5,
+            'xxl' => 6,
+            'xxxl' => 7,
+        ];
+
+        $leftKey = Tools::strtolower(trim($leftLabel));
+        $rightKey = Tools::strtolower(trim($rightLabel));
+        $leftOrder = $orderMap[$leftKey] ?? null;
+        $rightOrder = $orderMap[$rightKey] ?? null;
+
+        if ($leftOrder !== null && $rightOrder !== null) {
+            return $leftOrder <=> $rightOrder;
+        }
+
+        if ($leftOrder !== null) {
+            return -1;
+        }
+
+        if ($rightOrder !== null) {
+            return 1;
+        }
+
+        return strcmp($leftKey, $rightKey);
     }
 
     protected function shouldBlockBeDisplayed(array $params)
