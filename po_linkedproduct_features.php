@@ -14,6 +14,7 @@ class Po_linkedproduct_features extends Module
 {
     /** @var string */
     protected $_html = '';
+    public const CONFIG_SIZE_FEATURE_IDS = 'PO_LINKEDPRODUCT_SIZE_FEATURE_IDS';
     private const GROUP_PAGE_SIZE = 20;
     protected ?array $groupDryRunData = null;
     protected array $groupDryRunInput = [];
@@ -43,7 +44,7 @@ class Po_linkedproduct_features extends Module
             return false;
         }
 
-        return parent::install()
+        $result = parent::install()
             && $this->registerHook('displayAdminProductsExtra')
             && $this->registerHook('displayProductLinked')
             && $this->registerHook('displayHeader')
@@ -51,6 +52,12 @@ class Po_linkedproduct_features extends Module
             && $this->registerHook('actionObjectProductAddAfter')
             && $this->registerHook('actionObjectProductUpdateAfter')
             && $this->installTab();
+
+        if ($result) {
+            \Configuration::updateValue(self::CONFIG_SIZE_FEATURE_IDS, '4');
+        }
+
+        return $result;
     }
 
     public function uninstall()
@@ -59,6 +66,8 @@ class Po_linkedproduct_features extends Module
         if ($uninstallResult === false) {
             return false;
         }
+
+        \Configuration::deleteByName(self::CONFIG_SIZE_FEATURE_IDS);
 
         return parent::uninstall()
             && $this->uninstallTab();
@@ -123,6 +132,11 @@ class Po_linkedproduct_features extends Module
                         $this->_html .= $this->displayConfirmation(
                             $this->l('Indeks został przebudowany dla produktów: ') . (int) $count
                         );
+                        break;
+                    case 'save_size_feature_ids':
+                        $sizeFeatureIds = $this->parseCsvIds((string) Tools::getValue('size_feature_ids', ''));
+                        \Configuration::updateValue(self::CONFIG_SIZE_FEATURE_IDS, implode(',', $sizeFeatureIds));
+                        $this->_html .= $this->displayConfirmation($this->l('Zapisano ID cech rozmiaru.'));
                         break;
                 }
             } catch (\Exception $e) {
@@ -249,6 +263,7 @@ class Po_linkedproduct_features extends Module
         }
 
         $selectedOptions = $this->parseCsvIds($profile['options_csv'] ?? '');
+        $sizeFeatureIds = $this->parseCsvIds((string) \Configuration::get(self::CONFIG_SIZE_FEATURE_IDS, '4'));
 
         $output = '<div class="panel">
             <div class="panel-heading">' . $this->l('Profile linkowania po cechach') . '</div>
@@ -297,6 +312,25 @@ class Po_linkedproduct_features extends Module
         }
 
         $output .= '</tbody></table></div></div>';
+
+        $output .= '<form method="post" class="defaultForm form-horizontal" style="margin-bottom:15px;">
+            <input type="hidden" name="lp_action" value="save_size_feature_ids">
+            <div class="panel">
+                <div class="panel-heading">' . $this->l('Ustawienia sortowania rozmiaru') . '</div>
+                <div class="form-group">
+                    <label class="control-label col-lg-3">' . $this->l('ID cech rozmiaru') . '</label>
+                    <div class="col-lg-9">
+                        <input type="text" name="size_feature_ids" class="form-control" value="' . htmlspecialchars(implode(',', $sizeFeatureIds)) . '">
+                        <p class="help-block">' . $this->l('Podaj ID cech rozmiaru oddzielone przecinkami (np. 4,12,15). Dla tych cech kolejność wartości będzie XS, S, M, L, XL...') . '</p>
+                    </div>
+                </div>
+                <div class="panel-footer">
+                    <button type="submit" class="btn btn-default pull-right">
+                        <i class="process-icon-save"></i> ' . $this->l('Save') . '
+                    </button>
+                </div>
+            </div>
+        </form>';
 
         $output .= '<form method="post" class="defaultForm form-horizontal">
             <input type="hidden" name="lp_action" value="save_profile">
