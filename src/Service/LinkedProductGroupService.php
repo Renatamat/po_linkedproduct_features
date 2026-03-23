@@ -269,10 +269,6 @@ class LinkedProductGroupService
             $sql .= ' INNER JOIN ' . _DB_PREFIX_ . 'product_lang pl ON pl.id_product = p.id_product AND pl.id_lang=' . (int) $this->context->language->id;
         }
 
-        if ($includeLang) {
-            $sql .= ' INNER JOIN ' . _DB_PREFIX_ . 'product_lang pl ON pl.id_product = p.id_product AND pl.id_lang=' . (int) $this->context->language->id;
-        }
-
         $sql .= ' WHERE p.reference LIKE "' . $likePrefix . '%" AND p.active=1';
 
         return $sql;
