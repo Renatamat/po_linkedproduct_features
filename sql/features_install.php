@@ -6,6 +6,7 @@ $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'po_link_profile` (
     `id_profile` INT(11) NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(128) NOT NULL,
     `options_csv` VARCHAR(64) NOT NULL,
+    `hidden_options_csv` VARCHAR(64) NOT NULL DEFAULT "",
     `family_csv` VARCHAR(255) NULL,
     `active` TINYINT(1) NOT NULL DEFAULT 1,
     `show_muted` TINYINT(1) NOT NULL DEFAULT 1,
