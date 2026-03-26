@@ -23,7 +23,7 @@ class Po_linkedproduct_features extends Module
     {
         $this->name = 'po_linkedproduct_features';
         $this->tab = 'administration';
-        $this->version = '1.1.1';
+        $this->version = '1.1.2';
         $this->author = 'Przemysław Markiewicz';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -263,6 +263,7 @@ class Po_linkedproduct_features extends Module
         }
 
         $selectedOptions = $this->parseCsvIds($profile['options_csv'] ?? '');
+        $hiddenOptions = $this->parseCsvIds($profile['hidden_options_csv'] ?? '');
         $sizeFeatureIds = $this->parseCsvIds((string) \Configuration::get(self::CONFIG_SIZE_FEATURE_IDS, '4'));
 
         $output = '<div class="panel">
@@ -365,7 +366,9 @@ class Po_linkedproduct_features extends Module
             }
             $output .= '</tr></thead><tbody>';
             foreach ($selectedOptions as $featureId) {
-                $output .= '<tr><td>' . htmlspecialchars($featureOptions[$featureId] ?? ('#' . $featureId)) . '</td>';
+                $output .= '<tr><td>' . htmlspecialchars($featureOptions[$featureId] ?? ('#' . $featureId))
+                    . '<br><label style="font-weight:normal; margin-top:6px;"><input type="checkbox" name="profile_hidden_options[]" value="' . (int) $featureId . '"'
+                    . (in_array($featureId, $hiddenOptions, true) ? ' checked' : '') . '> ' . $this->l('Ukryj na froncie') . '</label></td>';
                 foreach ($languages as $lang) {
                     $value = $labelMap[$featureId][$lang['id_lang']] ?? '';
                     $output .= '<td><input type="text" class="form-control" name="profile_label[' . (int) $featureId . '][' . (int) $lang['id_lang'] . ']" value="' . htmlspecialchars((string) $value) . '"></td>';
@@ -761,6 +764,7 @@ class Po_linkedproduct_features extends Module
         $profileId = (int) Tools::getValue('profile_id');
         $name = trim((string) Tools::getValue('profile_name'));
         $options = Tools::getValue('profile_options', []);
+        $hiddenOptions = Tools::getValue('profile_hidden_options', []);
         $active = Tools::getValue('profile_active') ? 1 : 0;
         $showMuted = Tools::getValue('profile_show_muted') ? 1 : 0;
 
@@ -774,6 +778,10 @@ class Po_linkedproduct_features extends Module
 
         $optionsCsv = $this->buildCsv($options);
         $optionIds = $this->parseCsvIds($optionsCsv);
+        $hiddenOptionIds = array_values(array_intersect(
+            $optionIds,
+            $this->parseCsvIds($this->buildCsv(is_array($hiddenOptions) ? $hiddenOptions : []))
+        ));
 
         if (count($optionIds) < 1 || count($optionIds) > 3) {
             throw new \RuntimeException($this->l('Wybierz od 1 do 3 cech w OPTIONS.'));
@@ -782,6 +790,7 @@ class Po_linkedproduct_features extends Module
         $data = [
             'name' => pSQL($name),
             'options_csv' => pSQL($optionsCsv),
+            'hidden_options_csv' => pSQL(implode(',', $hiddenOptionIds)),
             'active' => (int) $active,
             'show_muted' => (int) $showMuted,
         ];
