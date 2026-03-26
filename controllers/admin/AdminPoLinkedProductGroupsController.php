@@ -281,7 +281,7 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
 
     private function validateGroupInput(): array
     {
-        $prefix = strtoupper(trim((string) Tools::getValue('sku_prefix')));
+        $prefix = $this->normalizeSkuRule((string) Tools::getValue('sku_prefix'));
         $profileId = (int) Tools::getValue('profile_id');
         $featureIds = [];
         if ($profileId > 0) {
@@ -293,10 +293,17 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
             }
         }
 
+        $isExactSkuList = strpos($prefix, ',') !== false;
+
         if ($prefix === '') {
-            $this->errors[] = $this->l('Prefiks SKU jest wymagany.');
+            $this->errors[] = $this->l('Prefiks SKU lub lista SKU jest wymagana.');
         } elseif (Tools::strlen($prefix) > 64) {
-            $this->errors[] = $this->l('Prefiks SKU jest zbyt długi.');
+            $this->errors[] = $this->l('Reguła SKU jest zbyt długa.');
+        } elseif ($isExactSkuList) {
+            $skuList = $this->parseSkuList($prefix);
+            if (!$skuList) {
+                $this->errors[] = $this->l('Podaj poprawną listę pełnych SKU oddzielonych przecinkami.');
+            }
         } elseif (!preg_match('/^[A-Z0-9\-_]+$/', $prefix)) {
             $this->errors[] = $this->l('Prefiks SKU ma niedozwolone znaki.');
         }
@@ -316,6 +323,35 @@ class AdminPoLinkedProductGroupsController extends ModuleAdminController
         }
 
         return [$prefix, $profileId, $featureIds];
+    }
+
+    private function normalizeSkuRule(string $value): string
+    {
+        $normalized = strtoupper(trim($value));
+        if (strpos($normalized, ',') === false) {
+            return $normalized;
+        }
+
+        $skuList = $this->parseSkuList($normalized);
+        if (!$skuList) {
+            return '';
+        }
+
+        return implode(',', $skuList);
+    }
+
+    private function parseSkuList(string $value): array
+    {
+        $parts = array_map('trim', explode(',', $value));
+        $items = [];
+        foreach ($parts as $part) {
+            if ($part === '' || !preg_match('/^[A-Z0-9\-_]+$/', $part)) {
+                return [];
+            }
+            $items[$part] = $part;
+        }
+
+        return array_values($items);
     }
 
     private function getGroups(array $filters, int $offset, int $limit): array
