@@ -644,7 +644,8 @@ class Po_linkedproduct_features extends Module
 
     protected function validateGroupInput(): array
     {
-        $prefix = $this->normalizeSkuRule((string) Tools::getValue('sku_prefix'));
+        $rawSkuRule = strtoupper(trim((string) Tools::getValue('sku_prefix')));
+        $prefix = $this->normalizeSkuRule($rawSkuRule);
         $profileId = (int) Tools::getValue('profile_id');
         $featureIds = [];
         if ($profileId > 0) {
@@ -657,16 +658,19 @@ class Po_linkedproduct_features extends Module
         }
 
         $hasError = false;
-        $isExactSkuList = strpos($prefix, ',') !== false;
+        $isExactSkuList = strpos($rawSkuRule, ',') !== false;
 
-        if ($prefix === '') {
+        if ($prefix === '' && $isExactSkuList) {
+            $this->_html .= $this->displayError($this->l('Podaj poprawną listę pełnych SKU oddzielonych przecinkami.'));
+            $hasError = true;
+        } elseif ($prefix === '') {
             $this->_html .= $this->displayError($this->l('Prefiks SKU lub lista SKU jest wymagana.'));
             $hasError = true;
         } elseif (Tools::strlen($prefix) > 64) {
             $this->_html .= $this->displayError($this->l('Reguła SKU jest zbyt długa.'));
             $hasError = true;
         } elseif ($isExactSkuList) {
-            $skuList = $this->parseSkuList($prefix);
+            $skuList = $this->parseSkuList($rawSkuRule);
             if (!$skuList) {
                 $this->_html .= $this->displayError($this->l('Podaj poprawną listę pełnych SKU oddzielonych przecinkami.'));
                 $hasError = true;
