@@ -11,7 +11,7 @@
           <tr>
             <th><input type="checkbox" onclick="$('.lp-group-checkbox').prop('checked', this.checked);"></th>
             <th>{l s='ID' mod='po_linkedproduct_features'}</th>
-            <th>{l s='Prefiks SKU' mod='po_linkedproduct_features'}</th>
+            <th>{l s='Reguła SKU' mod='po_linkedproduct_features'}</th>
             <th>{l s='Cechy' mod='po_linkedproduct_features'}</th>
             <th>{l s='Liczba produktów' mod='po_linkedproduct_features'}</th>
             <th>{l s='Aktualizacja' mod='po_linkedproduct_features'}</th>
@@ -92,10 +92,10 @@
       </div>
     </div>
     <div class="form-group">
-      <label class="control-label col-lg-3">{l s='Prefiks SKU' mod='po_linkedproduct_features'}</label>
+      <label class="control-label col-lg-3">{l s='Prefiks SKU / pełne SKU' mod='po_linkedproduct_features'}</label>
       <div class="col-lg-9">
         <input type="text" name="sku_prefix" class="form-control" value="{$dry_run_input.prefix|default:''|escape:'html':'UTF-8'}" required>
-        <p class="help-block">{l s='Dozwolone znaki: A-Z, 0-9, -, _' mod='po_linkedproduct_features'}</p>
+        <p class="help-block">{l s='Wpisz prefiks SKU albo kilka pełnych SKU po przecinku (np. ABC-001,ABC-002). Dozwolone znaki: A-Z, 0-9, -, _' mod='po_linkedproduct_features'}</p>
       </div>
     </div>
     <div class="panel-footer">

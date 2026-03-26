@@ -644,7 +644,7 @@ class Po_linkedproduct_features extends Module
 
     protected function validateGroupInput(): array
     {
-        $prefix = strtoupper(trim((string) Tools::getValue('sku_prefix')));
+        $prefix = $this->normalizeSkuRule((string) Tools::getValue('sku_prefix'));
         $profileId = (int) Tools::getValue('profile_id');
         $featureIds = [];
         if ($profileId > 0) {
@@ -657,12 +657,20 @@ class Po_linkedproduct_features extends Module
         }
 
         $hasError = false;
+        $isExactSkuList = strpos($prefix, ',') !== false;
+
         if ($prefix === '') {
-            $this->_html .= $this->displayError($this->l('Prefiks SKU jest wymagany.'));
+            $this->_html .= $this->displayError($this->l('Prefiks SKU lub lista SKU jest wymagana.'));
             $hasError = true;
         } elseif (Tools::strlen($prefix) > 64) {
-            $this->_html .= $this->displayError($this->l('Prefiks SKU jest zbyt długi.'));
+            $this->_html .= $this->displayError($this->l('Reguła SKU jest zbyt długa.'));
             $hasError = true;
+        } elseif ($isExactSkuList) {
+            $skuList = $this->parseSkuList($prefix);
+            if (!$skuList) {
+                $this->_html .= $this->displayError($this->l('Podaj poprawną listę pełnych SKU oddzielonych przecinkami.'));
+                $hasError = true;
+            }
         } elseif (!preg_match('/^[A-Z0-9\-_]+$/', $prefix)) {
             $this->_html .= $this->displayError($this->l('Prefiks SKU ma niedozwolone znaki.'));
             $hasError = true;
@@ -685,6 +693,35 @@ class Po_linkedproduct_features extends Module
         }
 
         return [$prefix, $profileId, $featureIds];
+    }
+
+    protected function normalizeSkuRule(string $value): string
+    {
+        $normalized = strtoupper(trim($value));
+        if (strpos($normalized, ',') === false) {
+            return $normalized;
+        }
+
+        $skuList = $this->parseSkuList($normalized);
+        if (!$skuList) {
+            return '';
+        }
+
+        return implode(',', $skuList);
+    }
+
+    protected function parseSkuList(string $value): array
+    {
+        $parts = array_map('trim', explode(',', $value));
+        $items = [];
+        foreach ($parts as $part) {
+            if ($part === '' || !preg_match('/^[A-Z0-9\-_]+$/', $part)) {
+                return [];
+            }
+            $items[$part] = $part;
+        }
+
+        return array_values($items);
     }
 
     protected function getGroups(array $filters, int $offset, int $limit): array

@@ -21,14 +21,14 @@ class LinkedProductGroupService
         $this->module = $module;
     }
 
-    public function previewMatch(string $prefix, array $featureIds, array $featureValueFilters = [], int $limit = 10): array
+    public function previewMatch(string $skuRule, array $featureIds, array $featureValueFilters = [], int $limit = 10): array
     {
         $featureIds = $this->sanitizeFeatureIds($featureIds);
         if (!$featureIds) {
             return ['count' => 0, 'rows' => []];
         }
 
-        $baseSql = $this->buildProductMatchSql($prefix, $featureIds, $featureValueFilters, true);
+        $baseSql = $this->buildProductMatchSql($skuRule, $featureIds, $featureValueFilters, true);
         $count = (int) $this->db->getValue('SELECT COUNT(DISTINCT p.id_product) ' . $baseSql);
 
         $rows = $this->db->executeS(
@@ -190,14 +190,14 @@ class LinkedProductGroupService
         return ['rows' => $rows, 'total' => $total];
     }
 
-    public function findProductIds(string $prefix, array $featureIds, array $featureValueFilters = []): array
+    public function findProductIds(string $skuRule, array $featureIds, array $featureValueFilters = []): array
     {
         $featureIds = $this->sanitizeFeatureIds($featureIds);
         if (!$featureIds) {
             return [];
         }
 
-        $baseSql = $this->buildProductMatchSql($prefix, $featureIds, $featureValueFilters);
+        $baseSql = $this->buildProductMatchSql($skuRule, $featureIds, $featureValueFilters);
         $rows = $this->db->executeS('SELECT DISTINCT p.id_product ' . $baseSql) ?: [];
 
         return array_values(array_map('intval', array_column($rows, 'id_product')));
@@ -249,29 +249,87 @@ class LinkedProductGroupService
         return $filters;
     }
 
-    private function buildProductMatchSql(string $prefix, array $featureIds, array $featureValueFilters = [], bool $includeLang = false): string
+    private function buildProductMatchSql(string $skuRule, array $featureIds, array $featureValueFilters = [], bool $includeLang = false): string
     {
-        $likePrefix = pSQL(addcslashes($prefix, '%_'));
+        $matching = $this->resolveSkuMatching($skuRule);
         $sql = ' FROM ' . _DB_PREFIX_ . 'product p';
         $sql .= ' INNER JOIN ' . _DB_PREFIX_ . 'feature_product fp ON fp.id_product = p.id_product';
         $featureIdsSql = implode(',', array_map('intval', $featureIds));
+        $whereConditions = [
+            'p.active=1',
+            'fp.id_feature IN (' . $featureIdsSql . ')',
+        ];
+
         if ($featureValueFilters) {
             $valueConditions = [];
             foreach ($featureValueFilters as $featureId => $valueId) {
                 $valueConditions[] = '(fp.id_feature = ' . (int) $featureId . ' AND fp.id_feature_value = ' . (int) $valueId . ')';
             }
-            $sql .= ' AND fp.id_feature IN (' . $featureIdsSql . ') AND (' . implode(' OR ', $valueConditions) . ')';
-        } else {
-            $sql .= ' AND fp.id_feature IN (' . $featureIdsSql . ')';
+            if ($valueConditions) {
+                $whereConditions[] = '(' . implode(' OR ', $valueConditions) . ')';
+            } else {
+                $whereConditions[] = '1=0';
+            }
         }
 
         if ($includeLang) {
             $sql .= ' INNER JOIN ' . _DB_PREFIX_ . 'product_lang pl ON pl.id_product = p.id_product AND pl.id_lang=' . (int) $this->context->language->id;
         }
 
-        $sql .= ' WHERE p.reference LIKE "' . $likePrefix . '%" AND p.active=1';
+        if ($matching['mode'] === 'exact' && !empty($matching['skus'])) {
+            $safeSku = array_map(static function ($sku) {
+                return '\'' . pSQL((string) $sku) . '\'';
+            }, $matching['skus']);
+            $whereConditions[] = 'p.reference IN (' . implode(',', $safeSku) . ')';
+        } else {
+            $likePrefix = pSQL(addcslashes((string) $matching['prefix'], '%_'));
+            $whereConditions[] = 'p.reference LIKE \'' . $likePrefix . '%\'';
+        }
+
+        $sql .= ' WHERE ' . implode(' AND ', $whereConditions);
 
         return $sql;
+    }
+
+    private function resolveSkuMatching(string $skuRule): array
+    {
+        $value = strtoupper(trim($skuRule));
+        if (strpos($value, ',') === false) {
+            return [
+                'mode' => 'prefix',
+                'prefix' => $value,
+                'skus' => [],
+            ];
+        }
+
+        $skus = $this->parseSkuList($value);
+        if (!$skus) {
+            return [
+                'mode' => 'prefix',
+                'prefix' => $value,
+                'skus' => [],
+            ];
+        }
+
+        return [
+            'mode' => 'exact',
+            'prefix' => '',
+            'skus' => $skus,
+        ];
+    }
+
+    private function parseSkuList(string $value): array
+    {
+        $parts = array_map('trim', explode(',', $value));
+        $items = [];
+        foreach ($parts as $part) {
+            if ($part === '' || !preg_match('/^[A-Z0-9\-_]+$/', $part)) {
+                return [];
+            }
+            $items[$part] = $part;
+        }
+
+        return array_values($items);
     }
 
     private function getFeatureValuesForProducts(array $productIds, array $featureIds): array
