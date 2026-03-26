@@ -255,31 +255,38 @@ class LinkedProductGroupService
         $sql = ' FROM ' . _DB_PREFIX_ . 'product p';
         $sql .= ' INNER JOIN ' . _DB_PREFIX_ . 'feature_product fp ON fp.id_product = p.id_product';
         $featureIdsSql = implode(',', array_map('intval', $featureIds));
+        $whereConditions = [
+            'p.active=1',
+            'fp.id_feature IN (' . $featureIdsSql . ')',
+        ];
+
         if ($featureValueFilters) {
             $valueConditions = [];
             foreach ($featureValueFilters as $featureId => $valueId) {
                 $valueConditions[] = '(fp.id_feature = ' . (int) $featureId . ' AND fp.id_feature_value = ' . (int) $valueId . ')';
             }
-            $sql .= ' AND fp.id_feature IN (' . $featureIdsSql . ') AND (' . implode(' OR ', $valueConditions) . ')';
-        } else {
-            $sql .= ' AND fp.id_feature IN (' . $featureIdsSql . ')';
+            if ($valueConditions) {
+                $whereConditions[] = '(' . implode(' OR ', $valueConditions) . ')';
+            } else {
+                $whereConditions[] = '1=0';
+            }
         }
 
         if ($includeLang) {
             $sql .= ' INNER JOIN ' . _DB_PREFIX_ . 'product_lang pl ON pl.id_product = p.id_product AND pl.id_lang=' . (int) $this->context->language->id;
         }
 
-        $sql .= ' WHERE p.active=1';
-
         if ($matching['mode'] === 'exact' && !empty($matching['skus'])) {
             $safeSku = array_map(static function ($sku) {
                 return '\'' . pSQL((string) $sku) . '\'';
             }, $matching['skus']);
-            $sql .= ' AND p.reference IN (' . implode(',', $safeSku) . ')';
+            $whereConditions[] = 'p.reference IN (' . implode(',', $safeSku) . ')';
         } else {
             $likePrefix = pSQL(addcslashes((string) $matching['prefix'], '%_'));
-            $sql .= ' AND p.reference LIKE "' . $likePrefix . '%"';
+            $whereConditions[] = 'p.reference LIKE \'' . $likePrefix . '%\'';
         }
+
+        $sql .= ' WHERE ' . implode(' AND ', $whereConditions);
 
         return $sql;
     }
