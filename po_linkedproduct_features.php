@@ -25,7 +25,7 @@ class Po_linkedproduct_features extends Module
         $this->name = 'po_linkedproduct_features';
         $this->tab = 'administration';
         $this->version = '1.1.2';
-        $this->author = 'Przemysław Markiewicz';
+        $this->author = 'RM';
         $this->need_instance = 0;
         $this->bootstrap = true;
 
