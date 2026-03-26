@@ -1,7 +1,7 @@
 <div class="panel">
   <h3><i class="icon-link"></i> {l s='Szczegóły grupy' mod='po_linkedproduct_features'}</h3>
   <p><strong>{l s='ID' mod='po_linkedproduct_features'}:</strong> #{$group.id_group|intval}</p>
-  <p><strong>{l s='Prefiks SKU' mod='po_linkedproduct_features'}:</strong> {$group.sku_prefix|escape:'html':'UTF-8'}</p>
+  <p><strong>{l s='Reguła SKU' mod='po_linkedproduct_features'}:</strong> {$group.sku_prefix|escape:'html':'UTF-8'}</p>
   <p><strong>{l s='Cechy' mod='po_linkedproduct_features'}:</strong> {$group.features_label|escape:'html':'UTF-8'}</p>
   <p><strong>{l s='Aktualizacja' mod='po_linkedproduct_features'}:</strong> {$group.updated_at|escape:'html':'UTF-8'}</p>
   <form method="post" style="display:inline-block">
