@@ -15,6 +15,7 @@ class Po_linkedproduct_features extends Module
     /** @var string */
     protected $_html = '';
     public const CONFIG_SIZE_FEATURE_IDS = 'PO_LINKEDPRODUCT_SIZE_FEATURE_IDS';
+    private const CUSTOM_HOOK_PRODUCT_LINKED = 'displayProductLinked';
     private const GROUP_PAGE_SIZE = 20;
     protected ?array $groupDryRunData = null;
     protected array $groupDryRunInput = [];
@@ -44,13 +45,12 @@ class Po_linkedproduct_features extends Module
             return false;
         }
 
+        if (!$this->ensureCustomHooksExist()) {
+            return false;
+        }
+
         $result = parent::install()
-            && $this->registerHook('displayAdminProductsExtra')
-            && $this->registerHook('displayProductLinked')
-            && $this->registerHook('displayHeader')
-            && $this->registerHook('actionProductUpdate')
-            && $this->registerHook('actionObjectProductAddAfter')
-            && $this->registerHook('actionObjectProductUpdateAfter')
+            && $this->registerRequiredHooks()
             && $this->installTab();
 
         if ($result) {
@@ -69,8 +69,74 @@ class Po_linkedproduct_features extends Module
 
         \Configuration::deleteByName(self::CONFIG_SIZE_FEATURE_IDS);
 
-        return parent::uninstall()
+        $result = parent::uninstall()
             && $this->uninstallTab();
+
+        if (!$result) {
+            return false;
+        }
+
+        return $this->removeCustomHookIfUnused(self::CUSTOM_HOOK_PRODUCT_LINKED);
+    }
+
+    public function registerRequiredHooks(): bool
+    {
+        foreach ($this->getRequiredHooks() as $hookName) {
+            if (!$this->isRegisteredInHook($hookName) && !$this->registerHook($hookName)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function getRequiredHooks(): array
+    {
+        return [
+            'displayAdminProductsExtra',
+            self::CUSTOM_HOOK_PRODUCT_LINKED,
+            'displayHeader',
+            'actionProductUpdate',
+            'actionObjectProductAddAfter',
+            'actionObjectProductUpdateAfter',
+        ];
+    }
+
+    public function ensureCustomHooksExist(): bool
+    {
+        $hookId = (int) \Hook::getIdByName(self::CUSTOM_HOOK_PRODUCT_LINKED);
+        if ($hookId > 0) {
+            return true;
+        }
+
+        $hook = new \Hook();
+        $hook->name = self::CUSTOM_HOOK_PRODUCT_LINKED;
+        $hook->title = self::CUSTOM_HOOK_PRODUCT_LINKED;
+        $hook->description = 'Custom hook for rendering linked product features on product page';
+        $hook->position = 1;
+        $hook->live_edit = 0;
+
+        return (bool) $hook->add();
+    }
+
+    private function removeCustomHookIfUnused(string $hookName): bool
+    {
+        $hookId = (int) \Hook::getIdByName($hookName);
+        if ($hookId <= 0) {
+            return true;
+        }
+
+        $modulesUsingHook = (int) \Db::getInstance()->getValue(
+            'SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'hook_module` WHERE id_hook=' . $hookId
+        );
+
+        if ($modulesUsingHook > 0) {
+            return true;
+        }
+
+        $hook = new \Hook($hookId);
+
+        return (bool) $hook->delete();
     }
 
     public function installTab(): bool
