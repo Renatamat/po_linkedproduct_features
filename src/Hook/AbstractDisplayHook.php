@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace PoLinkedProductFeatures\Hook;
+namespace Piano\LinkedProduct\Hook;
 
 use Context;
 use Module;
@@ -23,21 +23,17 @@ abstract class AbstractDisplayHook
             return '';
         }
 
-        if (!$this->assignTemplateVariables($params)) {
-            return '';
-        }
+        $this->assignTemplateVariables($params);
 
-        return $this->module->fetch(
-            'module:' . $this->module->name . '/views/templates/hook/' . $this->getTemplate()
+        return $this->module->display(
+            $this->module->getLocalPath() . $this->module->name . '.php',
+            'views/templates/hook/' . $this->getTemplate()
         );
     }
 
     abstract protected function getTemplate(): string;
 
-    abstract protected function assignTemplateVariables(array $params): bool;
+    abstract protected function assignTemplateVariables(array $params);
 
-    protected function shouldBlockBeDisplayed(array $params)
-    {
-        return true;
-    }
+    abstract protected function shouldBlockBeDisplayed(array $params);
 }

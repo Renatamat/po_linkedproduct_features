@@ -1,17 +1,14 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const selects = document.querySelectorAll('.type-select');
-
-  selects.forEach((select) => {
+  document.querySelectorAll('.type-select').forEach((select) => {
     select.addEventListener('change', (event) => {
       const target = event.currentTarget;
       if (!(target instanceof HTMLSelectElement)) {
         return;
       }
-      const url = target.value;
-      if (!url) {
-        return;
+      const nextUrl = target.value;
+      if (nextUrl) {
+        window.location.href = nextUrl;
       }
-      window.location.href = url;
     });
   });
 });

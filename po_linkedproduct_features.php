@@ -6,9 +6,9 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-require_once __DIR__ . '/src/Hook/AbstractDisplayHook.php';
-require_once __DIR__ . '/src/Hook/DisplayProductLinkedFeatures.php';
-require_once __DIR__ . '/src/Service/LinkedProductGroupService.php';
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+}
 
 class Po_linkedproduct_features extends Module
 {
@@ -24,8 +24,8 @@ class Po_linkedproduct_features extends Module
     {
         $this->name = 'po_linkedproduct_features';
         $this->tab = 'administration';
-        $this->version = '1.1.2';
-        $this->author = 'RM';
+        $this->version = '1.0.1';
+        $this->author = 'Przemysław Markiewicz';
         $this->need_instance = 0;
         $this->bootstrap = true;
 
@@ -34,27 +34,15 @@ class Po_linkedproduct_features extends Module
         $this->displayName = $this->l('Linkowanie po cechach i rodzinie');
         $this->description = $this->l('Moduł do linkowania produktów po cechach i rodzinie.');
 
-        $this->ps_versions_compliancy = ['min' => '8.0.0', 'max' => _PS_VERSION_];
+        $this->ps_versions_compliancy = ['min' => '8.2.0', 'max' => _PS_VERSION_];
         $this->languages = \Language::getLanguages(false);
     }
 
     public function install()
     {
-        $installResult = include dirname(__FILE__) . '/sql/features_install.php';
-        if ($installResult === false) {
+        $sqlResult = include __DIR__ . '/sql/features_install.php';
+        if ($sqlResult === false) {
             return false;
-        }
-
-        if (!$this->ensureCustomHooksExist()) {
-            return false;
-        }
-
-        $result = parent::install()
-            && $this->registerRequiredHooks()
-            && $this->installTab();
-
-        if ($result) {
-            \Configuration::updateValue(self::CONFIG_SIZE_FEATURE_IDS, '4');
         }
 
         return $result;
@@ -62,68 +50,9 @@ class Po_linkedproduct_features extends Module
 
     public function uninstall()
     {
-        $uninstallResult = include dirname(__FILE__) . '/sql/features_uninstall.php';
-        if ($uninstallResult === false) {
+        $sqlResult = include __DIR__ . '/sql/features_uninstall.php';
+        if ($sqlResult === false) {
             return false;
-        }
-
-        \Configuration::deleteByName(self::CONFIG_SIZE_FEATURE_IDS);
-
-        $result = parent::uninstall()
-            && $this->uninstallTab();
-
-        if (!$result) {
-            return false;
-        }
-
-        return $this->removeCustomHookIfUnused(self::CUSTOM_HOOK_PRODUCT_LINKED);
-    }
-
-    public function registerRequiredHooks(): bool
-    {
-        foreach ($this->getRequiredHooks() as $hookName) {
-            if (!$this->isRegisteredInHook($hookName) && !$this->registerHook($hookName)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private function getRequiredHooks(): array
-    {
-        return [
-            'displayAdminProductsExtra',
-            self::CUSTOM_HOOK_PRODUCT_LINKED,
-            'displayHeader',
-            'actionProductUpdate',
-            'actionObjectProductAddAfter',
-            'actionObjectProductUpdateAfter',
-        ];
-    }
-
-    public function ensureCustomHooksExist(): bool
-    {
-        $hookId = (int) \Hook::getIdByName(self::CUSTOM_HOOK_PRODUCT_LINKED);
-        if ($hookId > 0) {
-            return true;
-        }
-
-        $hook = new \Hook();
-        $hook->name = self::CUSTOM_HOOK_PRODUCT_LINKED;
-        $hook->title = self::CUSTOM_HOOK_PRODUCT_LINKED;
-        $hook->description = 'Custom hook for rendering linked product features on product page';
-        $hook->position = 1;
-        $hook->live_edit = 0;
-
-        return (bool) $hook->add();
-    }
-
-    private function removeCustomHookIfUnused(string $hookName): bool
-    {
-        $hookId = (int) \Hook::getIdByName($hookName);
-        if ($hookId <= 0) {
-            return true;
         }
 
         $modulesUsingHook = (int) \Db::getInstance()->getValue(
@@ -256,6 +185,7 @@ class Po_linkedproduct_features extends Module
             'modules/' . $this->name . '/views/js/front.js',
             ['position' => 'bottom', 'priority' => 200]
         );
+
         $this->context->controller->registerStylesheet(
             'modules-po_linkedproduct_features-style-front',
             'modules/' . $this->name . '/views/css/front.css',
