@@ -11,7 +11,7 @@
                                     {if $value.disabled || !$value.link}
                                         <span class="type-list-text">{$value.label}</span>
                                     {else}
-                                        <a rel="{if $value.link == $page.canonical}nofollow{/if}" href="{$value.link}" class="{if $value.active}active{/if} type-list-text">
+                                        <a rel="{if $value.link == $page.canonical}nofollow{/if}" href="{$value.link}" class="{if $value.active}active{/if} {if $value.muted}is-muted{/if} type-list-text">
                                             {$value.label}
                                         </a>
                                     {/if}

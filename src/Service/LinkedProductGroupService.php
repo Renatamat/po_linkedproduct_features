@@ -1,0 +1,379 @@
+<?php
+
+declare(strict_types=1);
+
+namespace PoLinkedProductFeatures\Service;
+
+use Context;
+use Db;
+use Module;
+
+class LinkedProductGroupService
+{
+    private Db $db;
+    private Context $context;
+    private Module $module;
+
+    public function __construct(Module $module, Context $context)
+    {
+        $this->db = Db::getInstance();
+        $this->context = $context;
+        $this->module = $module;
+    }
+
+    public function previewMatch(string $skuRule, array $featureIds, array $featureValueFilters = [], int $limit = 10): array
+    {
+        $featureIds = $this->sanitizeFeatureIds($featureIds);
+        if (!$featureIds) {
+            return ['count' => 0, 'rows' => []];
+        }
+
+        $baseSql = $this->buildProductMatchSql($skuRule, $featureIds, $featureValueFilters, true);
+        $count = (int) $this->db->getValue('SELECT COUNT(DISTINCT p.id_product) ' . $baseSql);
+
+        $rows = $this->db->executeS(
+            'SELECT p.id_product, p.reference, p.active, pl.name ' . $baseSql .
+            ' ORDER BY p.id_product DESC
+              LIMIT ' . (int) $limit
+        ) ?: [];
+
+        return ['count' => $count, 'rows' => $rows];
+    }
+
+    public function rebuildGroup(int $groupId): int
+    {
+        $group = $this->db->getRow('SELECT g.id_group, g.id_profile, g.sku_prefix, g.feature_values_json, p.options_csv
+            FROM ' . _DB_PREFIX_ . 'po_link_group g
+            INNER JOIN ' . _DB_PREFIX_ . 'po_link_profile p ON p.id_profile = g.id_profile
+            WHERE g.id_group=' . (int) $groupId);
+
+        if (!$group) {
+            return 0;
+        }
+
+        $featureIds = $this->parseCsvIds($group['options_csv'] ?? '');
+        if (!$featureIds) {
+            return 0;
+        }
+
+        $filters = $this->parseFeatureValueFilters($group['feature_values_json'] ?? null);
+        $productIds = $this->findProductIds($group['sku_prefix'], $featureIds, $filters);
+
+        $this->db->execute('START TRANSACTION');
+        try {
+            $this->db->delete('po_link_product_family', 'id_profile=' . (int) $group['id_profile'] . ' AND family_key=\'' . pSQL((string) $group['sku_prefix']) . '\'');
+            $this->db->execute('DELETE FROM ' . _DB_PREFIX_ . 'po_link_index
+                WHERE id_profile=' . (int) $group['id_profile'] . ' AND family_key=\'' . pSQL((string) $group['sku_prefix']) . '\'');
+
+            if ($productIds) {
+                $values = [];
+                foreach ($productIds as $productId) {
+                    $values[] = '(' . (int) $productId . ', ' . (int) $group['id_profile'] . ", '"
+                        . pSQL((string) $group['sku_prefix']) . "', NOW())";
+                }
+
+                foreach (array_chunk($values, 200) as $chunk) {
+                    $this->db->execute('REPLACE INTO ' . _DB_PREFIX_ . 'po_link_product_family (id_product, id_profile, family_key, updated_at)
+                        VALUES ' . implode(',', $chunk));
+                }
+
+                foreach ($productIds as $productId) {
+                    $this->module->updateFeatureIndexForProduct((int) $productId);
+                }
+            }
+
+            $this->db->execute('UPDATE ' . _DB_PREFIX_ . 'po_link_group
+                SET updated_at = NOW()
+                WHERE id_group=' . (int) $groupId);
+
+            $this->db->execute('COMMIT');
+        } catch (\Throwable $e) {
+            $this->db->execute('ROLLBACK');
+            throw $e;
+        }
+
+        return count($productIds);
+    }
+
+    public function deleteGroup(int $groupId): void
+    {
+        $group = $this->db->getRow('SELECT id_profile, sku_prefix FROM ' . _DB_PREFIX_ . 'po_link_group WHERE id_group=' . (int) $groupId);
+        if (!$group) {
+            return;
+        }
+
+        $this->db->execute('START TRANSACTION');
+        try {
+            $this->db->delete('po_link_group', 'id_group=' . (int) $groupId);
+            $this->db->delete('po_link_product_family', 'id_profile=' . (int) $group['id_profile'] . ' AND family_key=\'' . pSQL((string) $group['sku_prefix']) . '\'');
+            $this->db->execute('DELETE FROM ' . _DB_PREFIX_ . 'po_link_index
+                WHERE id_profile=' . (int) $group['id_profile'] . ' AND family_key=\'' . pSQL((string) $group['sku_prefix']) . '\'');
+            $this->db->execute('COMMIT');
+        } catch (\Throwable $e) {
+            $this->db->execute('ROLLBACK');
+            throw $e;
+        }
+    }
+
+    public function removeProductFromGroup(int $groupId, int $productId): bool
+    {
+        $group = $this->db->getRow('SELECT id_profile, sku_prefix FROM ' . _DB_PREFIX_ . 'po_link_group WHERE id_group=' . (int) $groupId);
+        if (!$group) {
+            return false;
+        }
+
+        $this->db->execute('START TRANSACTION');
+        try {
+            $this->db->delete('po_link_product_family', 'id_product=' . (int) $productId . ' AND id_profile=' . (int) $group['id_profile'] . ' AND family_key=\'' . pSQL((string) $group['sku_prefix']) . '\'');
+            $this->db->delete('po_link_index', 'id_product=' . (int) $productId);
+            $this->db->execute('UPDATE ' . _DB_PREFIX_ . 'po_link_group
+                SET updated_at = NOW()
+                WHERE id_group=' . (int) $groupId);
+            $this->db->execute('COMMIT');
+        } catch (\Throwable $e) {
+            $this->db->execute('ROLLBACK');
+            throw $e;
+        }
+
+        return true;
+    }
+
+    public function findGroupProducts(int $groupId, array $filters, int $offset, int $limit): array
+    {
+        $group = $this->db->getRow('SELECT id_profile, sku_prefix FROM ' . _DB_PREFIX_ . 'po_link_group WHERE id_group=' . (int) $groupId);
+        if (!$group) {
+            return ['rows' => [], 'total' => 0];
+        }
+
+        $profile = $this->db->getRow('SELECT options_csv FROM ' . _DB_PREFIX_ . 'po_link_profile WHERE id_profile=' . (int) $group['id_profile']);
+        $featureIds = $this->parseCsvIds((string) ($profile['options_csv'] ?? ''));
+
+        $where = ' WHERE pf.id_profile=' . (int) $group['id_profile'] . ' AND pf.family_key=\'' . pSQL((string) $group['sku_prefix']) . '\'';
+        $searchConditions = [];
+        if (!empty($filters['product_id'])) {
+            $searchConditions[] = 'p.id_product=' . (int) $filters['product_id'];
+        }
+        if (!empty($filters['sku'])) {
+            $term = (string) $filters['sku'];
+            $likePrefix = pSQL(addcslashes($term, '%_'));
+            $searchConditions[] = 'p.reference LIKE \'' . $likePrefix . '%\'';
+            $searchConditions[] = 'pl.name LIKE \'%' . pSQL($term) . '%\'';
+        }
+        if ($searchConditions) {
+            $where .= ' AND (' . implode(' OR ', $searchConditions) . ')';
+        }
+
+        $total = (int) $this->db->getValue('SELECT COUNT(*)
+            FROM ' . _DB_PREFIX_ . 'po_link_product_family pf
+            INNER JOIN ' . _DB_PREFIX_ . 'product p ON p.id_product = pf.id_product
+            INNER JOIN ' . _DB_PREFIX_ . 'product_lang pl ON pl.id_product = p.id_product AND pl.id_lang=' . (int) $this->context->language->id .
+            $where);
+
+        $rows = $this->db->executeS('SELECT p.id_product, p.reference, p.active, pl.name
+            FROM ' . _DB_PREFIX_ . 'po_link_product_family pf
+            INNER JOIN ' . _DB_PREFIX_ . 'product p ON p.id_product = pf.id_product
+            INNER JOIN ' . _DB_PREFIX_ . 'product_lang pl ON pl.id_product = p.id_product AND pl.id_lang=' . (int) $this->context->language->id .
+            $where .
+            ' ORDER BY p.id_product DESC
+              LIMIT ' . (int) $offset . ', ' . (int) $limit) ?: [];
+
+        if ($rows) {
+            $productIds = array_values(array_unique(array_map('intval', array_column($rows, 'id_product'))));
+            $featureValues = $this->getFeatureValuesForProducts($productIds, $featureIds);
+            foreach ($rows as &$row) {
+                $productId = (int) $row['id_product'];
+                $row['feature_values'] = $featureValues[$productId] ?? [];
+            }
+            unset($row);
+        }
+
+        return ['rows' => $rows, 'total' => $total];
+    }
+
+    public function findProductIds(string $skuRule, array $featureIds, array $featureValueFilters = []): array
+    {
+        $featureIds = $this->sanitizeFeatureIds($featureIds);
+        if (!$featureIds) {
+            return [];
+        }
+
+        $baseSql = $this->buildProductMatchSql($skuRule, $featureIds, $featureValueFilters);
+        $rows = $this->db->executeS('SELECT DISTINCT p.id_product ' . $baseSql) ?: [];
+
+        return array_values(array_map('intval', array_column($rows, 'id_product')));
+    }
+
+    private function sanitizeFeatureIds(array $featureIds): array
+    {
+        $clean = array_values(array_unique(array_filter(array_map('intval', $featureIds), static function ($id) {
+            return $id > 0;
+        })));
+
+        return $clean;
+    }
+
+    private function parseCsvIds(?string $csv): array
+    {
+        if (!$csv) {
+            return [];
+        }
+
+        $ids = array_map('intval', array_filter(array_map('trim', explode(',', $csv))));
+        $ids = array_values(array_unique(array_filter($ids, static function ($id) {
+            return $id > 0;
+        })));
+
+        return $ids;
+    }
+
+    private function parseFeatureValueFilters(?string $json): array
+    {
+        if (!$json) {
+            return [];
+        }
+
+        $decoded = json_decode((string) $json, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        $filters = [];
+        foreach ($decoded as $featureId => $valueId) {
+            $featureId = (int) $featureId;
+            $valueId = (int) $valueId;
+            if ($featureId > 0 && $valueId > 0) {
+                $filters[$featureId] = $valueId;
+            }
+        }
+
+        return $filters;
+    }
+
+    private function buildProductMatchSql(string $skuRule, array $featureIds, array $featureValueFilters = [], bool $includeLang = false): string
+    {
+        $matching = $this->resolveSkuMatching($skuRule);
+        $sql = ' FROM ' . _DB_PREFIX_ . 'product p';
+        $sql .= ' INNER JOIN ' . _DB_PREFIX_ . 'feature_product fp ON fp.id_product = p.id_product';
+        $featureIdsSql = implode(',', array_map('intval', $featureIds));
+        $whereConditions = [
+            'p.active=1',
+            'fp.id_feature IN (' . $featureIdsSql . ')',
+        ];
+
+        if ($featureValueFilters) {
+            $valueConditions = [];
+            foreach ($featureValueFilters as $featureId => $valueId) {
+                $valueConditions[] = '(fp.id_feature = ' . (int) $featureId . ' AND fp.id_feature_value = ' . (int) $valueId . ')';
+            }
+            if ($valueConditions) {
+                $whereConditions[] = '(' . implode(' OR ', $valueConditions) . ')';
+            } else {
+                $whereConditions[] = '1=0';
+            }
+        }
+
+        if ($includeLang) {
+            $sql .= ' INNER JOIN ' . _DB_PREFIX_ . 'product_lang pl ON pl.id_product = p.id_product AND pl.id_lang=' . (int) $this->context->language->id;
+        }
+
+        if ($matching['mode'] === 'exact' && !empty($matching['skus'])) {
+            $safeSku = array_map(static function ($sku) {
+                return '\'' . pSQL((string) $sku) . '\'';
+            }, $matching['skus']);
+            $whereConditions[] = 'p.reference IN (' . implode(',', $safeSku) . ')';
+        } else {
+            $likePrefix = pSQL(addcslashes((string) $matching['prefix'], '%_'));
+            $whereConditions[] = 'p.reference LIKE \'' . $likePrefix . '%\'';
+        }
+
+        $sql .= ' WHERE ' . implode(' AND ', $whereConditions);
+
+        return $sql;
+    }
+
+    private function resolveSkuMatching(string $skuRule): array
+    {
+        $value = strtoupper(trim($skuRule));
+        if (strpos($value, ',') === false) {
+            return [
+                'mode' => 'prefix',
+                'prefix' => $value,
+                'skus' => [],
+            ];
+        }
+
+        $skus = $this->parseSkuList($value);
+        if (!$skus) {
+            return [
+                'mode' => 'prefix',
+                'prefix' => $value,
+                'skus' => [],
+            ];
+        }
+
+        return [
+            'mode' => 'exact',
+            'prefix' => '',
+            'skus' => $skus,
+        ];
+    }
+
+    private function parseSkuList(string $value): array
+    {
+        $parts = array_map('trim', explode(',', $value));
+        $items = [];
+        foreach ($parts as $part) {
+            if ($part === '' || !preg_match('/^[A-Z0-9\-_]+$/', $part)) {
+                return [];
+            }
+            $items[$part] = $part;
+        }
+
+        return array_values($items);
+    }
+
+    private function getFeatureValuesForProducts(array $productIds, array $featureIds): array
+    {
+        if (!$productIds || !$featureIds) {
+            return [];
+        }
+
+        $rows = $this->db->executeS('
+            SELECT fp.id_product, fp.id_feature, fl.name AS feature_name, fvl.value
+            FROM ' . _DB_PREFIX_ . 'feature_product fp
+            INNER JOIN ' . _DB_PREFIX_ . 'feature_lang fl
+                ON fl.id_feature = fp.id_feature
+                AND fl.id_lang=' . (int) $this->context->language->id . '
+            INNER JOIN ' . _DB_PREFIX_ . 'feature_value_lang fvl
+                ON fvl.id_feature_value = fp.id_feature_value
+                AND fvl.id_lang=' . (int) $this->context->language->id . '
+            WHERE fp.id_product IN (' . implode(',', array_map('intval', $productIds)) . ')
+              AND fp.id_feature IN (' . implode(',', array_map('intval', $featureIds)) . ')
+        ') ?: [];
+
+        $featureOrder = array_flip($featureIds);
+        $byProduct = [];
+        foreach ($rows as $row) {
+            $productId = (int) $row['id_product'];
+            $featureId = (int) $row['id_feature'];
+            $byProduct[$productId][$featureId] = [
+                'feature_name' => (string) $row['feature_name'],
+                'value' => (string) $row['value'],
+                'order' => $featureOrder[$featureId] ?? PHP_INT_MAX,
+            ];
+        }
+
+        foreach ($byProduct as $productId => $features) {
+            uasort($features, static function ($a, $b) {
+                return $a['order'] <=> $b['order'];
+            });
+            foreach ($features as &$feature) {
+                unset($feature['order']);
+            }
+            unset($feature);
+            $byProduct[$productId] = array_values($features);
+        }
+
+        return $byProduct;
+    }
+}

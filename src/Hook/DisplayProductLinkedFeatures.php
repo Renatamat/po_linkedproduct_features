@@ -1,10 +1,11 @@
 <?php
 declare(strict_types=1);
 
-namespace Piano\LinkedProduct\Hook;
+namespace PoLinkedProductFeatures\Hook;
 
 use Db;
 use Tools;
+use Configuration;
 
 class DisplayProductLinkedFeatures extends AbstractDisplayHook
 {
@@ -15,22 +16,19 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
         return self::TEMPLATE_FILE;
     }
 
-    protected function assignTemplateVariables(array $params)
+    protected function assignTemplateVariables(array $params): bool
     {
         $productId = (int) Tools::getValue('id_product');
 
         if (!$productId) {
-            return;
+            return false;
         }
 
         if (!$this->assignFeatureLinkedPositions($productId)) {
-            $this->context->smarty->assign([
-                'feature_positions' => [],
-                'positions' => [],
-                'id_lang' => (int) $this->context->language->id,
-            ]);
-            return;
+            return false;
         }
+
+        return true;
     }
 
     private function assignFeatureLinkedPositions(int $productId): bool
@@ -47,7 +45,7 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
         }
 
         $profile = $db->getRow('
-            SELECT id_profile, options_csv
+            SELECT id_profile, options_csv, hidden_options_csv, show_muted
             FROM ' . _DB_PREFIX_ . 'po_link_profile
             WHERE id_profile=' . (int) $assignment['id_profile'] . ' AND active=1'
         );
@@ -57,16 +55,19 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
         }
 
         $optionIds = $this->parseCsvIds((string) ($profile['options_csv'] ?? ''));
+        $hiddenOptionIds = $this->parseCsvIds((string) ($profile['hidden_options_csv'] ?? ''));
+        $showMuted = (int) ($profile['show_muted'] ?? 1) === 1;
         if (!$optionIds) {
             return false;
         }
 
         $indexRows = $db->executeS(
-            'SELECT i.id_product, i.options_json, p.active
+            'SELECT i.id_product, i.options_json
              FROM ' . _DB_PREFIX_ . 'po_link_index i
              INNER JOIN ' . _DB_PREFIX_ . 'product p ON p.id_product = i.id_product
              WHERE i.id_profile=' . (int) $profile['id_profile'] . '
-               AND i.family_key=\'' . pSQL((string) $assignment['family_key']) . '\''
+               AND i.family_key=\'' . pSQL((string) $assignment['family_key']) . '\'
+               AND p.active=1'
         ) ?: [];
 
         if (!$indexRows) {
@@ -75,7 +76,6 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
 
         $productOptions = [];
         $featureValues = [];
-        $productActive = [];
         foreach ($indexRows as $row) {
             $decoded = json_decode((string) $row['options_json'], true);
             if (!is_array($decoded)) {
@@ -93,7 +93,6 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
             }
             $productIdRow = (int) $row['id_product'];
             $productOptions[$productIdRow] = $options;
-            $productActive[$productIdRow] = (bool) $row['active'];
         }
 
         if (!isset($productOptions[$productId])) {
@@ -146,55 +145,109 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
 
         $currentOptions = $productOptions[$productId] ?? [];
         $featurePositions = [];
+        $sizeFeatureIds = $this->getConfiguredSizeFeatureIds();
+
+        $missingLabel = $this->module->l('Brak', 'displayproductlinkedfeatures');
 
         foreach ($optionIds as $featureId) {
             $values = array_keys($featureValues[$featureId] ?? []);
+            $hasMissing = false;
+            foreach ($productOptions as $candidateOptions) {
+                if (!array_key_exists($featureId, $candidateOptions)) {
+                    $hasMissing = true;
+                    break;
+                }
+            }
+            if ($hasMissing) {
+                $values[] = 0;
+            }
             $valueEntries = [];
             foreach ($values as $valueId) {
                 $expected = $currentOptions;
-                $expected[$featureId] = $valueId;
+                if ($valueId === 0) {
+                    unset($expected[$featureId]);
+                } else {
+                    $expected[$featureId] = $valueId;
+                }
 
                 $targetProductId = null;
-                $targetActive = false;
+                $isExact = false;
                 foreach ($productOptions as $candidateId => $candidateOptions) {
                     $match = true;
                     foreach ($optionIds as $checkFeatureId) {
-                        if (!isset($expected[$checkFeatureId])) {
-                            continue;
-                        }
-                        if (!isset($candidateOptions[$checkFeatureId]) || $candidateOptions[$checkFeatureId] !== $expected[$checkFeatureId]) {
-                            $match = false;
-                            break;
+                        if (array_key_exists($checkFeatureId, $expected)) {
+                            if (!isset($candidateOptions[$checkFeatureId]) || $candidateOptions[$checkFeatureId] !== $expected[$checkFeatureId]) {
+                                $match = false;
+                                break;
+                            }
+                        } else {
+                            if (array_key_exists($checkFeatureId, $candidateOptions)) {
+                                $match = false;
+                                break;
+                            }
                         }
                     }
                     if ($match) {
-                        $candidateActive = $productActive[$candidateId] ?? false;
+                        $targetProductId = $candidateId;
+                        $isExact = true;
                         if ($candidateId === $productId) {
-                            $targetProductId = $candidateId;
-                            $targetActive = true;
                             break;
-                        }
-                        if ($candidateActive && !$targetActive) {
-                            $targetProductId = $candidateId;
-                            $targetActive = true;
-                        } elseif ($targetProductId === null) {
-                            $targetProductId = $candidateId;
-                            $targetActive = $candidateActive;
                         }
                     }
                 }
 
+                if ($targetProductId === null && $showMuted) {
+                    $bestScore = -1;
+                    $maxScore = max(0, count($currentOptions) - 1);
+                    foreach ($productOptions as $candidateId => $candidateOptions) {
+                        if ($valueId === 0) {
+                            if (array_key_exists($featureId, $candidateOptions)) {
+                                continue;
+                            }
+                        } else {
+                            if (!isset($candidateOptions[$featureId]) || $candidateOptions[$featureId] !== $valueId) {
+                                continue;
+                            }
+                        }
+                        $score = 0;
+                        foreach ($currentOptions as $currentFeatureId => $currentValueId) {
+                            if ($currentFeatureId === $featureId) {
+                                continue;
+                            }
+                            if (isset($candidateOptions[$currentFeatureId]) && $candidateOptions[$currentFeatureId] === $currentValueId) {
+                                $score++;
+                            }
+                        }
+                        if ($score > $bestScore) {
+                            $bestScore = $score;
+                            $targetProductId = $candidateId;
+                            if ($score >= $maxScore) {
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!$showMuted && !$isExact) {
+                    continue;
+                }
+
                 $valueEntries[] = [
                     'value_id' => $valueId,
-                    'label' => $valueNameMap[$featureId][$valueId] ?? (string) $valueId,
+                    'label' => $valueId === 0 ? $missingLabel : ($valueNameMap[$featureId][$valueId] ?? (string) $valueId),
                     'product_id' => $targetProductId,
                     'active' => $targetProductId === $productId,
-                    'disabled' => $targetProductId === null || !$targetActive,
-                    'link' => $targetProductId ? $this->context->link->getProductLink($targetProductId) : null,
+                    'disabled' => $valueId === 0 || $targetProductId === null,
+                    'muted' => $targetProductId !== null && !$isExact,
+                    'link' => ($valueId !== 0 && $targetProductId) ? $this->context->link->getProductLink($targetProductId) : null,
                 ];
             }
 
-            usort($valueEntries, function ($a, $b) {
+            usort($valueEntries, function ($a, $b) use ($featureId, $sizeFeatureIds) {
+                if (in_array($featureId, $sizeFeatureIds, true)) {
+                    return $this->compareSizeLabels((string) $a['label'], (string) $b['label']);
+                }
+
                 return strcmp((string) $a['label'], (string) $b['label']);
             });
 
@@ -203,6 +256,12 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
                 'title' => $labelMap[$featureId] ?? ($featureNames[$featureId] ?? ('#' . $featureId)),
                 'values' => $valueEntries,
             ];
+        }
+
+        if ($hiddenOptionIds) {
+            $featurePositions = array_values(array_filter($featurePositions, static function (array $position) use ($hiddenOptionIds): bool {
+                return !in_array((int) ($position['feature_id'] ?? 0), $hiddenOptionIds, true);
+            }));
         }
 
         if (!$featurePositions) {
@@ -230,6 +289,53 @@ class DisplayProductLinkedFeatures extends AbstractDisplayHook
         })));
 
         return $ids;
+    }
+
+    private function getConfiguredSizeFeatureIds(): array
+    {
+        $csv = (string) Configuration::get('PO_LINKEDPRODUCT_SIZE_FEATURE_IDS', '4');
+        if ($csv === '') {
+            return [];
+        }
+
+        $ids = array_map('intval', array_filter(array_map('trim', explode(',', $csv))));
+
+        return array_values(array_unique(array_filter($ids, static function ($id) {
+            return $id > 0;
+        })));
+    }
+
+    private function compareSizeLabels(string $leftLabel, string $rightLabel): int
+    {
+        $orderMap = [
+            'xxs' => 0,
+            'xs' => 1,
+            's' => 2,
+            'm' => 3,
+            'l' => 4,
+            'xl' => 5,
+            'xxl' => 6,
+            'xxxl' => 7,
+        ];
+
+        $leftKey = Tools::strtolower(trim($leftLabel));
+        $rightKey = Tools::strtolower(trim($rightLabel));
+        $leftOrder = $orderMap[$leftKey] ?? null;
+        $rightOrder = $orderMap[$rightKey] ?? null;
+
+        if ($leftOrder !== null && $rightOrder !== null) {
+            return $leftOrder <=> $rightOrder;
+        }
+
+        if ($leftOrder !== null) {
+            return -1;
+        }
+
+        if ($rightOrder !== null) {
+            return 1;
+        }
+
+        return strcmp($leftKey, $rightKey);
     }
 
     protected function shouldBlockBeDisplayed(array $params)
